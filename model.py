@@ -667,14 +667,14 @@ class QANet(nn.Module):
         C = self.input_embedding_layer(cwids, ccids)
         Q = self.input_embedding_layer(qwids, qcids)
         
-        C = self.context_encoder(C)
-        Q = self.question_encoder(Q)
+        C = self.context_encoder(C, mask_C)
+        Q = self.question_encoder(Q, mask_Q)
         
         x = self.context_query_attn_layer(C.transpose(1, 2), Q.transpose(1, 2)).transpose(1, 2)
         x = self.CQ_projection(x)
-        enc_1 = self.forward_stacked_enc_blocks(x)
-        enc_2 = self.forward_stacked_enc_blocks(enc_1)
-        enc_3 = self.forward_stacked_enc_blocks(enc_2)
+        enc_1 = self.forward_stacked_enc_blocks(x, mask_C)
+        enc_2 = self.forward_stacked_enc_blocks(enc_1, mask_C)
+        enc_3 = self.forward_stacked_enc_blocks(enc_2, mask_C)
 
         logits_start = self.p_start(torch.cat((enc_1, enc_2), dim=1), mask_C)
         logits_end   = self.p_end(torch.cat((enc_1, enc_3), dim=1), mask_C)
