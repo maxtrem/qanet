@@ -563,7 +563,7 @@ class QANet(nn.Module):
         self.p_end           = PointerNet(2*d_model)
 
     def forward_stacked_enc_blocks(self, x, mask=None):
-        for block in self.stacked_enc_blocks:
+        for block in self.stacked_enc_block:
             x = block(x, mask=mask)
         return x
         
