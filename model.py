@@ -2,11 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch.utils.data import Dataset
-
-import numpy as np
-
-import random, json, math
+import math
 
 
 def apply_mask(target, mask, eps=-1e30):
