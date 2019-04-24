@@ -379,7 +379,7 @@ class EncoderBlock(nn.Module):
     
     Each of these layers is placed inside a residual block.
     """
-    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0):
+    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0, weights=None):
         """
         # Arguments
             d_model:     (int) dimensionality of the model
@@ -393,14 +393,24 @@ class EncoderBlock(nn.Module):
         shape = d_model, seq_limit
         self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit, droprate=0.0)
         
-        stacked_CNN = [ResidualBlock(DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size, activation=nn.ReLU), shape=shape) for _ in range(num_conv_layers)]
+        if weights:
+            assert ('conv_layers' in weights), 'No convolutional layers found weights dict'
+            assert ('mh_attn' in weights),     'No MultiHeadAttn module found weights dict'
+            assert ('ffnet' in weights),       'No feed forward module found weights dict'
+            self.weights = weights
+        else:
+            self.weights = {}
+            self.weights['conv_layers'] = [DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size, activation=nn.ReLU) for _ in range(num_conv_layers)]
+            self.weights['mh_attn']     = MultiHeadAttn(d_model=d_model, heads=8, proj_type=2)
+            self.weights['ffnet']       = FeedForward(d_model, d_model, activation=None)
+
+
+        stacked_CNN = [ResidualBlock(conv_layer, shape=shape) for conv_layer in self.weights['conv_layers']]
         self.conv_blocks = nn.Sequential(*stacked_CNN)
         
-        mh_attn = MultiHeadAttn(d_model=d_model, heads=8, proj_type=2)
-        self.self_attn_block = ResidualBlock(mh_attn, shape=shape, activation=nn.ReLU, droprate=droprate)
+        self.self_attn_block = ResidualBlock(self.weights['mh_attn'], shape=shape, activation=nn.ReLU, droprate=droprate)
         
-        FFnet = FeedForward(d_model, d_model, activation=None)
-        self.feed_forward    = ResidualBlock(FFnet, shape=shape, activation=None, droprate=droprate)
+        self.feed_forward = ResidualBlock(self.weights['ffnet'], shape=shape, activation=None, droprate=droprate)
         
         
     def forward(self, x):
@@ -531,7 +541,7 @@ class QANet(nn.Module):
         self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=1)
         
         self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, droprate=droprate)
-        self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, droprate=droprate)
+        self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, droprate=droprate, weights=self.context_encoder.weights)
         
         self.context_query_attn_layer = ContextQueryAttention(d_model)
         
