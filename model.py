@@ -379,7 +379,7 @@ class EncoderBlock(nn.Module):
     
     Each of these layers is placed inside a residual block.
     """
-    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0, shared_weights=None):
+    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0, shared=None):
         """
         # Arguments
             d_model:     (int) dimensionality of the model
@@ -393,14 +393,14 @@ class EncoderBlock(nn.Module):
         shape = d_model, seq_limit
         self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit, droprate=0.0)
 
-        weight_keys = {'feed_forward', 'self_attn_block', 'conv_blocks'}
+        shared_keys = {'feed_forward', 'self_attn_block', 'conv_blocks'}
 
-        if shared_weights:
-            missing = set.difference(weight_keys, set(shared_weights.keys()))
-            assert missing == set(), f'Missing weights {missing}'
+        if shared:
+            missing = set.difference(shared_keys, set(shared._modules.keys()))
+            assert missing == set(), f'Missing modules {missing}'
 
-            weight_update = dict((k, weights[k]) for k in shared_weights)
-            self.__dict__.update(weight_update)
+            for key in shared_keys:
+                setattr(self, key, shared._modules[key])
 
         else:
             conv_layers = [DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size, activation=nn.ReLU) for _ in range(num_conv_layers)]
