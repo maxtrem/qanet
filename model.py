@@ -497,14 +497,20 @@ class EncoderBlock(nn.Module):
 
         else:
             conv_layers = [DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size, activation=nn.ReLU) for _ in range(num_conv_layers)]
-            stacked_CNN = [ResidualBlock(conv_layer, shape=d_model) for conv_layer in conv_layers]
+            mh_attn = MultiHeadAttnC(d_model=d_model, heads=8, proj_type=2)
+            ffnet = FeedForward(d_model, d_model, activation=None)
+
+            self.main_layers = {'conv_layers': conv_layers,
+                                'mh_attn': mh_attn,
+                                'ffnet': ffnet}
+
+            stacked_CNN = [ResidualBlock(conv_layer, shape=d_model) for conv_layer in self.main_layers['conv_layers']]
             self.conv_blocks = nn.Sequential(*stacked_CNN)
             
-            mh_attn = MultiHeadAttnC(d_model=d_model, heads=8, proj_type=2)
-            self.self_attn_block = ResidualBlock(mh_attn, shape=d_model, activation=nn.ReLU, droprate=droprate)
+            self.self_attn_block = ResidualBlock(self.main_layers['mh_attn'], shape=d_model, activation=nn.ReLU, droprate=droprate)
             
-            ffnet = FeedForward(d_model, d_model, activation=None)
-            self.feed_forward = ResidualBlock(ffnet, shape=d_model, activation=None, droprate=droprate)
+            self.feed_forward = ResidualBlock(self.main_layers['ffnet'], shape=d_model, activation=None, droprate=droprate)
+
         
         
     def forward(self, x, mask=None):
