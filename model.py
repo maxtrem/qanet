@@ -404,7 +404,7 @@ class EncoderBlock(nn.Module):
 
         else:
             conv_layers = [DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size, activation=nn.ReLU) for _ in range(num_conv_layers)]
-            stacked_CNN = [ResidualBlock(conv_layer, shape=d_model) for conv_layer in self.weights['conv_layers']]
+            stacked_CNN = [ResidualBlock(conv_layer, shape=d_model) for conv_layer in conv_layers]
             self.conv_blocks = nn.Sequential(*stacked_CNN)
             
             mh_attn = MultiHeadAttn(d_model=d_model, heads=8, proj_type=2)
