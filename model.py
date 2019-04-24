@@ -8,6 +8,10 @@ import numpy as np
 
 import random, json, math
 
+
+def apply_mask(target, mask, eps=-1e30):
+    return target * mask + (1 - mask) * (eps)
+
 class PositionalEncoding(nn.Module):
     """
     Creates a positional encoding layer as defined by:
@@ -183,21 +187,6 @@ class Highway(nn.Module):
             H = self.dropout(H)
             x = H * T  +  x * (1.0 - T)
         return x
-
-class PointerNet(nn.Module):
-    """Implements a Pointer Network as defined by:
-    Shuohang Wang and Jing Jiang. Machine comprehension using match-lstm and answer pointer. 
-    CoRR, abs/1608.07905, 2016. URL http://arxiv.org/abs/1608.07905."""
-    def __init__(self, in_features):
-        """
-        # Arguments
-            in_features: int, sets number of input features
-        """
-        super().__init__()
-        self.feedforward = FeedForward(in_features=in_features, out_features=1, bias=False, use_cnn=False, activation=None, droprate=0.0)
-        
-    def forward(self, x):
-        return self.feedforward(x)
 
 
 class InputEmbedding(nn.Module):
@@ -506,6 +495,23 @@ class ContextQueryAttention(nn.Module):
         B  = self.q2c_layer(S, C)
         return self.dropout(torch.cat((C, A, C*A, C*B), dim=2))
 
+class PointerNet(nn.Module):
+    """Implements a Pointer Network as defined by:
+    Shuohang Wang and Jing Jiang. Machine comprehension using match-lstm and answer pointer. 
+    CoRR, abs/1608.07905, 2016. URL http://arxiv.org/abs/1608.07905."""
+    def __init__(self, in_features):
+        """
+        # Arguments
+            in_features: int, sets number of input features
+        """
+        super().__init__()
+        self.feedforward = FeedForward(in_features=in_features, out_features=1, bias=False, use_cnn=False, activation=None, droprate=0.0)
+        
+    def forward(self, x, mask):
+        x = self.feedforward(x).squeeze()
+        x = apply_mask(x, mask)
+        return x
+
 
 class QANet(nn.Module):
     """
@@ -553,6 +559,10 @@ class QANet(nn.Module):
             logits_start: (torch.FloatTensor) logit scores for start of answer in context
             logits_end:   (torch.FloatTensor) logit scores for end of answer in context
         """
+
+        mask_C = (cwids != 0).float()
+        mask_Q = (qwids != 0).float()
+
         C = self.input_embedding_layer(cwids, ccids)
         Q = self.input_embedding_layer(qwids, qcids)
         
