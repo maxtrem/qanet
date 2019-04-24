@@ -267,7 +267,7 @@ class MultiHeadAttn(nn.Module):
     Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. 
     Attention is all you need. CoRR, abs/1706.03762, 2017a. URL http://arxiv.org/abs/1706.03762.
     """
-    def __init__(self, heads=8, d_model=128, proj_type=1):
+    def __init__(self, d_model=128, heads=8, proj_type=1):
         """
             Multi-Head-Attention
             # Arguments
@@ -333,6 +333,87 @@ class MultiHeadAttn(nn.Module):
             x = self.scaledDotProduct(K, Q, V).transpose(-2, -1)
             x = x.reshape(batch_size, self.d_model, -1) # removed transpose(-2, -1) before reshape
             return self.project(x, -1)
+
+class MultiHeadAttnC(nn.Module):
+    def __init__(self, d_model=128, heads=8, droprate=0.0, proj_type=1):
+        super().__init__()
+        self.d_model = d_model
+        self.num_head = heads
+        self.dropout     = nn.Dropout(p=droprate)
+
+        self.mem_conv = RegularConv(in_channels=d_model, out_channels=d_model*2, kernel_size=1)
+        self.query_conv = RegularConv(in_channels=d_model, out_channels=d_model, kernel_size=1)
+
+        bias = torch.empty(1)
+        nn.init.constant_(bias, 0)
+        self.bias = nn.Parameter(bias)
+
+    def forward(self, queries, mask):
+        memory = queries
+
+        memory = self.mem_conv(memory)
+        query = self.query_conv(queries)
+        memory = memory.transpose(1, 2)
+        query = query.transpose(1, 2)
+        Q = self.split_last_dim(query, self.num_head)
+        K, V = [self.split_last_dim(tensor, self.num_head) for tensor in torch.split(memory, self.d_model, dim=2)]
+
+        key_depth_per_head = self.d_model // self.num_head
+        Q *= key_depth_per_head**-0.5
+        x = self.dot_product_attention(Q, K, V, mask = mask)
+        return self.combine_last_two_dim(x.permute(0,2,1,3)).transpose(1, 2)
+
+    def dot_product_attention(self, q, k ,v, bias = False, mask = None):
+        """dot-product attention.
+        Args:
+        q: a Tensor with shape [batch, heads, length_q, depth_k]
+        k: a Tensor with shape [batch, heads, length_kv, depth_k]
+        v: a Tensor with shape [batch, heads, length_kv, depth_v]
+        bias: bias Tensor (see attention_bias())
+        is_training: a bool of training
+        scope: an optional string
+        Returns:
+        A Tensor.
+        """
+        logits = torch.matmul(q,k.permute(0,1,3,2))
+        if bias:
+            logits += self.bias
+        if mask is not None:
+            shapes = [x  if x != None else -1 for x in list(logits.size())]
+            mask = mask.view(shapes[0], 1, 1, shapes[-1])
+            logits = apply_mask(logits, mask)
+        weights = F.softmax(logits, dim=-1)
+        # dropping out the attention links for each of the heads
+        weights = self.dropout(weights)
+        return torch.matmul(weights, v)
+
+    def split_last_dim(self, x, n):
+        """Reshape x so that the last dimension becomes two dimensions.
+        The first of these two dimensions is n.
+        Args:
+        x: a Tensor with shape [..., m]
+        n: an integer.
+        Returns:
+        a Tensor with shape [..., n, m/n]
+        """
+        old_shape = list(x.size())
+        last = old_shape[-1]
+        new_shape = old_shape[:-1] + [n] + [last // n if last else None]
+        ret = x.view(new_shape)
+        return ret.permute(0, 2, 1, 3)
+
+    def combine_last_two_dim(self, x):
+        """Reshape x so that the last two dimension become one.
+        Args:
+        x: a Tensor with shape [..., a, b]
+        Returns:
+        a Tensor with shape [..., ab]
+        """
+        old_shape = list(x.size())
+        a, b = old_shape[-2:]
+        new_shape = old_shape[:-2] + [a * b if a and b else None]
+        ret = x.contiguous().view(new_shape)
+        return ret
             
     
 class ResidualBlock(nn.Module):
@@ -414,7 +495,7 @@ class EncoderBlock(nn.Module):
             stacked_CNN = [ResidualBlock(conv_layer, shape=d_model) for conv_layer in conv_layers]
             self.conv_blocks = nn.Sequential(*stacked_CNN)
             
-            mh_attn = MultiHeadAttn(d_model=d_model, heads=8, proj_type=2)
+            mh_attn = MultiHeadAttnC(d_model=d_model, heads=8, proj_type=2)
             self.self_attn_block = ResidualBlock(mh_attn, shape=d_model, activation=nn.ReLU, droprate=droprate)
             
             ffnet = FeedForward(d_model, d_model, activation=None)
