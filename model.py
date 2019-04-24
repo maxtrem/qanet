@@ -71,6 +71,33 @@ class DepthwiseSeparableCNN(nn.Module):
         x = self.pointwise_cnn(x)
         x = self.activation(x)
         return x
+        
+class RegularConv(nn.Module):
+    def __init__(self, in_channels, out_channels,
+                 kernel_size, dim=1, activation=None, bias=False):
+        super().__init__()
+
+        self.dim = dim
+        CNN =  getattr(nn, f'Conv{dim}d')
+        self.conv = CNN(
+            in_channels, out_channels,
+            kernel_size, padding=kernel_size // 2, 
+            bias=bias)
+        self.activation_ = activation() if activation else None
+
+        if self.activation_:
+            nonlinearity = self.activation_.__class__.__name__.lower()
+            nn.init.kaiming_normal_(self.conv.weight, nonlinearity=nonlinearity)
+        else:
+            nn.init.xavier_uniform_(self.conv.weight)
+
+    def activation(self, x):
+        return self.activation_(x) if self.activation_ else x
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.activation(x)
+        return x
     
 class FeedForward(nn.Module):
     """Implements a simple feedfoward layer, which can be switched between modes CNN and Linear"""
