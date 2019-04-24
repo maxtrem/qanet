@@ -290,7 +290,7 @@ class MultiHeadAttn(nn.Module):
         #print(Q.shape, K.transpose(-2, -1).shape, '-->', S.shape)
         return (S @ V)
     
-    def forward(self, x):
+    def forward(self, x, mask=None):
         """
             
         """
@@ -414,10 +414,10 @@ class EncoderBlock(nn.Module):
             self.feed_forward = ResidualBlock(ffnet, shape=d_model, activation=None, droprate=droprate)
         
         
-    def forward(self, x):
+    def forward(self, x, mask=None):
         x = self.positional_encoding_layer(x)
         x = self.conv_blocks(x)
-        x = self.self_attn_block(x)
+        x = self.self_attn_block(x, mask=mask)
         x = self.feed_forward(x)
         return x
 
@@ -555,9 +555,9 @@ class QANet(nn.Module):
         self.p_start         = PointerNet(2*d_model)
         self.p_end           = PointerNet(2*d_model)
 
-    def forward_stacked_enc_blocks(self, x, mask):
-        for enc_block in self.stacked_enc_blocks:
-            x = enc_block(x, mask)
+    def forward_stacked_enc_blocks(self, x, mask=None):
+        for block in self.stacked_enc_blocks:
+            x = block(x, mask=mask)
         return x
         
     def forward(self, cwids, ccids, qwids, qcids):
@@ -584,9 +584,9 @@ class QANet(nn.Module):
         
         x = self.context_query_attn_layer(C.transpose(1, 2), Q.transpose(1, 2)).transpose(1, 2)
         x = self.CQ_projection(x)
-        enc_1 = self.stacked_enc_block(x)
-        enc_2 = self.stacked_enc_block(enc_1)
-        enc_3 = self.stacked_enc_block(enc_2)
+        enc_1 = self.forward_stacked_enc_blocks(x)
+        enc_2 = self.forward_stacked_enc_blocks(enc_1)
+        enc_3 = self.forward_stacked_enc_blocks(enc_2)
 
         logits_start = self.p_start(torch.cat((enc_1, enc_2), dim=1), mask_C)
         logits_end   = self.p_end(torch.cat((enc_1, enc_3), dim=1), mask_C)
