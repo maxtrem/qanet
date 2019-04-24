@@ -543,7 +543,7 @@ class QANet(nn.Module):
         
         self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, droprate=droprate)
         self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, droprate=droprate, 
-                                                  shared_weights=self.context_encoder.__dict__)
+                                                  shared=self.context_encoder)
         
         self.context_query_attn_layer = ContextQueryAttention(d_model)
         
