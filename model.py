@@ -421,7 +421,7 @@ class ResidualBlock(nn.Module):
     ResidualBlock implements the function in form of `f(layernorm(x)) + x`. 
     Dropout and activation function can be set as well.
     """
-    def __init__(self, layer, shape, droprate=0.0, activation=nn.ReLU):
+    def __init__(self, layer, shape, norm=None, droprate=0.0, activation=nn.ReLU, shared_weight=False):
         """
         # Arguments
             layer:      (instance of nn.Module with forward() implemented), layer represents function f
@@ -433,8 +433,13 @@ class ResidualBlock(nn.Module):
 
         super().__init__()
         
+
         self.norm  = nn.LayerNorm(shape)
-        self.layer = layer
+        if shared_weight:
+            # prevents the layer module from being registered in parameters
+            self.__dict__.update({'layer': layer})
+        else:
+            self.layer = layer
         self.activation_ = activation() if activation else None
         self.dropout     = nn.Dropout(p=droprate)
         
