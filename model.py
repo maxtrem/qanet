@@ -360,9 +360,16 @@ class ResidualBlock(nn.Module):
     def activation(self, x):
         return self.activation_(x) if self.activation_ else x
         
-    def forward(self, x):
+    def forward(self, *args, **kwargs):
+        if 'x' in kwargs:
+            x = kwargs['x']
+            del kwargs['x']
+        else:
+            x = args[0]
+            args = args[1:]
         residual_x = x
-        x = self.layer(self.norm(x.transpose(1, 2)).transpose(1, 2))
+        x = self.norm(x.transpose(1, 2)).transpose(1, 2)
+        x = self.layer(x, *args, **kwargs)
         x = self.activation(x) + residual_x
         x = self.dropout(x)
         return x
