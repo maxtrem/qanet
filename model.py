@@ -575,8 +575,8 @@ class QANet(nn.Module):
         enc_2 = self.stacked_enc_block(enc_1)
         enc_3 = self.stacked_enc_block(enc_2)
 
-        logits_start = self.p_start(torch.cat((enc_1, enc_2), dim=1))
-        logits_end   = self.p_end(torch.cat((enc_1, enc_3), dim=1))
+        logits_start = self.p_start(torch.cat((enc_1, enc_2), dim=1), mask_C)
+        logits_end   = self.p_end(torch.cat((enc_1, enc_3), dim=1), mask_C)
         
         return logits_start.view(-1, self.c_limit), logits_end.view(-1, self.c_limit)
     
