@@ -486,9 +486,9 @@ class EncoderBlock(nn.Module):
         if shared:
             missing = set.difference(shared_keys, set(shared._modules.keys()))
             assert missing == set(), f'Missing modules {missing}'
+            shared_modules = dict(((key, shared._modules[key]) for key in shared_keys))
+            self.__dict__.update(shared_modules)
 
-            for key in shared_keys:
-                setattr(self, key, shared._modules[key])
 
         else:
             conv_layers = [DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size, activation=nn.ReLU) for _ in range(num_conv_layers)]
@@ -629,6 +629,7 @@ class QANet(nn.Module):
         
         self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=1)
         
+        # ToDo: EncoderBlock shared weights compability for loading weights
         self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, droprate=droprate)
         self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, droprate=droprate, 
                                                   shared=self.context_encoder)
@@ -667,10 +668,10 @@ class QANet(nn.Module):
         C = self.input_embedding_layer(cwids, ccids)
         Q = self.input_embedding_layer(qwids, qcids)
         
-        C = self.context_encoder(C, mask_C)
-        Q = self.question_encoder(Q, mask_Q)
+        C = self.context_encoder(C, mask_C).transpose(1, 2)
+        Q = self.question_encoder(Q, mask_Q).transpose(1, 2)
         
-        x = self.context_query_attn_layer(C.transpose(1, 2), Q.transpose(1, 2)).transpose(1, 2)
+        x = self.context_query_attn_layer(C, Q).transpose(1, 2)
         x = self.CQ_projection(x)
         enc_1 = self.forward_stacked_enc_blocks(x, mask_C)
         enc_2 = self.forward_stacked_enc_blocks(enc_1, mask_C)
