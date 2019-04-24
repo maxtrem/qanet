@@ -2,11 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch.utils.data import Dataset
-
-import numpy as np
-
-import random, json, math
+import math
 
 
 def apply_mask(target, mask, eps=-1e30):
@@ -370,6 +366,28 @@ class ResidualBlock(nn.Module):
         x = self.activation(x) + residual_x
         x = self.dropout(x)
         return x
+
+def PosEncoder(x, min_timescale=1.0, max_timescale=1.0e4):
+    x = x.transpose(1, 2)
+    length = x.size()[1]
+    channels = x.size()[2]
+    signal = get_timing_signal(length, channels, min_timescale, max_timescale)
+    return (x + signal.to(x.get_device())).transpose(1, 2)
+
+
+def get_timing_signal(length, channels,
+                      min_timescale=1.0, max_timescale=1.0e4):
+    position = torch.arange(length).type(torch.float32)
+    num_timescales = channels // 2
+    log_timescale_increment = (math.log(float(max_timescale) / float(min_timescale)) / (float(num_timescales) - 1))
+    inv_timescales = min_timescale * torch.exp(
+            torch.arange(num_timescales).type(torch.float32) * -log_timescale_increment)
+    scaled_time = position.unsqueeze(1) * inv_timescales.unsqueeze(0)
+    signal = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim = 1)
+    m = nn.ZeroPad2d((0, (channels % 2), 0, 0))
+    signal = m(signal)
+    signal = signal.view(1, length, channels)
+    return signal
     
 
 class EncoderBlock(nn.Module):
@@ -395,7 +413,7 @@ class EncoderBlock(nn.Module):
         super().__init__()
         # handing over shape to init LayerNorm layer
         shape = d_model, seq_limit
-        self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit, droprate=0.0)
+        #self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit, droprate=0.0)
         
         stacked_CNN = [ResidualBlock(DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size, activation=nn.ReLU), shape=shape) for _ in range(num_conv_layers)]
         self.conv_blocks = nn.Sequential(*stacked_CNN)
@@ -408,7 +426,8 @@ class EncoderBlock(nn.Module):
         
         
     def forward(self, x):
-        x = self.positional_encoding_layer(x)
+        #x = self.positional_encoding_layer(x)
+        x = PosEncoder(x)
         x = self.conv_blocks(x)
         x = self.self_attn_block(x)
         x = self.feed_forward(x)
@@ -534,8 +553,9 @@ class QANet(nn.Module):
         
         self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=1)
         
-        self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, droprate=droprate)
-        self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, droprate=droprate)
+        #self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, droprate=droprate)
+        #self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, droprate=droprate)
+        self.embedding_encoder      = EncoderBlock(d_model=d_model, seq_limit=None, droprate=droprate)
         
         self.context_query_attn_layer = ContextQueryAttention(d_model)
         
@@ -566,8 +586,11 @@ class QANet(nn.Module):
         C = self.input_embedding_layer(cwids, ccids)
         Q = self.input_embedding_layer(qwids, qcids)
         
-        C = self.context_encoder(C)
-        Q = self.question_encoder(Q)
+        #C = self.context_encoder(C)
+        #Q = self.question_encoder(Q)
+
+        C = self.embedding_encoder(C)
+        Q = self.embedding_encoder(Q)
         
         x = self.context_query_attn_layer(C.transpose(1, 2), Q.transpose(1, 2)).transpose(1, 2)
         x = self.CQ_projection(x)
