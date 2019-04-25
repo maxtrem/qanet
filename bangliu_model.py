@@ -46,11 +46,10 @@ def PosEncoder(x, min_timescale=1.0, max_timescale=1.0e4):
     length = x.size()[1]
     channels = x.size()[2]
     signal = get_timing_signal(length, channels, min_timescale, max_timescale)
-    return (x + signal.to(x.get_device())).transpose(1, 2)
+    return (x + signal.to(device)).transpose(1, 2)
 
 
-def get_timing_signal(length, channels,
-                      min_timescale=1.0, max_timescale=1.0e4):
+def get_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4):
     position = torch.arange(length).type(torch.float32)
     num_timescales = channels // 2
     log_timescale_increment = (math.log(float(max_timescale) / float(min_timescale)) / (float(num_timescales) - 1))
