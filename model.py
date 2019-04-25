@@ -454,7 +454,7 @@ class ResidualBlock(nn.Module):
             x = args[0]
             args = args[1:]
         residual_x = x
-        x = self.norm(x.transpose(1, 2)).transpose(1, 2)
+        x = self.norm(x)
         x = self.layer(x, *args, **kwargs)
         x = self.activation(x) + residual_x
         x = self.dropout(x)
@@ -472,7 +472,7 @@ class EncoderBlock(nn.Module):
     
     Each of these layers is placed inside a residual block.
     """
-    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0, shared=None):
+    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0, shared_weight=False):
         """
         # Arguments
             d_model:     (int) dimensionality of the model
@@ -486,13 +486,13 @@ class EncoderBlock(nn.Module):
         shape = d_model, seq_limit
         self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit, droprate=0.0)
 
-        shared_keys = {'feed_forward', 'self_attn_block', 'conv_blocks'}
+        shared_keys = {'conv_layers', 'mh_attn', 'ffnet'}
 
-        if shared:
-            missing = set.difference(shared_keys, set(shared._modules.keys()))
+        if shared_weight:
+            missing = set.difference(shared_keys, set(shared_weight.keys()))
             assert missing == set(), f'Missing modules {missing}'
-            shared_modules = dict(((key, shared._modules[key]) for key in shared_keys))
-            self.__dict__.update(shared_modules)
+            self.main_layers = shared_weight
+            shared = True
 
 
         else:
@@ -503,13 +503,14 @@ class EncoderBlock(nn.Module):
             self.main_layers = {'conv_layers': conv_layers,
                                 'mh_attn': mh_attn,
                                 'ffnet': ffnet}
+            shared = False
 
-            stacked_CNN = [ResidualBlock(conv_layer, shape=d_model) for conv_layer in self.main_layers['conv_layers']]
-            self.conv_blocks = nn.Sequential(*stacked_CNN)
-            
-            self.self_attn_block = ResidualBlock(self.main_layers['mh_attn'], shape=d_model, activation=nn.ReLU, droprate=droprate)
-            
-            self.feed_forward = ResidualBlock(self.main_layers['ffnet'], shape=d_model, activation=None, droprate=droprate)
+        stacked_CNN = [ResidualBlock(conv_layer, shape=shape, shared_weight=shared) for conv_layer in self.main_layers['conv_layers']]
+        self.conv_blocks = nn.Sequential(*stacked_CNN)
+        
+        self.self_attn_block = ResidualBlock(self.main_layers['mh_attn'], shape=shape, activation=nn.ReLU, droprate=droprate, shared_weight=shared)
+        
+        self.feed_forward = ResidualBlock(self.main_layers['ffnet'], shape=shape, activation=None, droprate=droprate, shared_weight=shared)
 
         
         
