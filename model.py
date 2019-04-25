@@ -462,7 +462,28 @@ class ResidualBlock(nn.Module):
         x = self.activation(x) + residual_x
         x = self.dropout(x)
         return x
-    
+
+def PosEncoder(x, min_timescale=1.0, max_timescale=1.0e4):
+    x = x.transpose(1, 2)
+    length = x.size()[1]
+    channels = x.size()[2]
+    signal = get_timing_signal(length, channels, min_timescale, max_timescale)
+    return (x + signal.to(device)).transpose(1, 2)
+
+
+def get_timing_signal(length, channels,
+                      min_timescale=1.0, max_timescale=1.0e4):
+    position = torch.arange(length).type(torch.float32)
+    num_timescales = channels // 2
+    log_timescale_increment = (math.log(float(max_timescale) / float(min_timescale)) / (float(num_timescales) - 1))
+    inv_timescales = min_timescale * torch.exp(
+            torch.arange(num_timescales).type(torch.float32) * -log_timescale_increment)
+    scaled_time = position.unsqueeze(1) * inv_timescales.unsqueeze(0)
+    signal = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim = 1)
+    m = nn.ZeroPad2d((0, (channels % 2), 0, 0))
+    signal = m(signal)
+    signal = signal.view(1, length, channels)
+    return signal
 
 class EncoderBlock(nn.Module):
     """
@@ -487,7 +508,7 @@ class EncoderBlock(nn.Module):
         super().__init__()
         # handing over shape to init LayerNorm layer
         shape = d_model, seq_limit
-        self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit, droprate=0.0)
+        #self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit, droprate=0.0)
 
         shared_keys = {'conv_layers', 'mh_attn', 'ffnet'}
 
@@ -525,7 +546,7 @@ class EncoderBlock(nn.Module):
         
         
     def forward(self, x, mask=None):
-        x = self.positional_encoding_layer(x)
+        x = PosEncoder(x)
         x = self.conv_blocks(x)
         x = self.self_attn_block(x, mask=mask)
         x = self.feed_forward(x)
@@ -609,7 +630,7 @@ class ContextQueryAttention(nn.Module):
     def forward(self, C, Q):
         C = C.transpose(1, 2)
         Q = Q.transpose(1, 2)
-        
+
         S  = self.attn_flow_layer(C, Q)
         A  = self.c2q_layer(S, Q)
         B  = self.q2c_layer(S, C)
@@ -631,6 +652,8 @@ class PointerNet(nn.Module):
         x = self.feedforward(x).squeeze()
         x = apply_mask(x, mask)
         return x
+
+
 
 class CQAttention(nn.Module):
     def __init__(self, d_model, dropout=0.1):
