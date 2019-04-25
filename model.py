@@ -421,7 +421,7 @@ class ResidualBlock(nn.Module):
     ResidualBlock implements the function in form of `f(layernorm(x)) + x`. 
     Dropout and activation function can be set as well.
     """
-    def __init__(self, layer, shape, norm=None, droprate=0.0, activation=nn.ReLU, shared_weight=False):
+    def __init__(self, layer, shape, norm=None, droprate=0.0, activation=nn.ReLU, shared_weight=False, shared_norm=False):
         """
         # Arguments
             layer:      (instance of nn.Module with forward() implemented), layer represents function f
@@ -433,8 +433,11 @@ class ResidualBlock(nn.Module):
 
         super().__init__()
         
-
-        self.norm  = nn.LayerNorm(shape)
+        if shared_norm:
+            # using __dict__.update prevents the layer module from being registered in parameters
+            self.__dict__.update({'norm': shared_norm})
+        else:
+            self.norm  = nn.LayerNorm(shape)
         if shared_weight:
             # prevents the layer module from being registered in parameters
             self.__dict__.update({'layer': layer})
@@ -472,7 +475,7 @@ class EncoderBlock(nn.Module):
     
     Each of these layers is placed inside a residual block.
     """
-    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0, shared_weight=False):
+    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0, shared_weight=False, shared_norm=False):
         """
         # Arguments
             d_model:     (int) dimensionality of the model
@@ -505,14 +508,19 @@ class EncoderBlock(nn.Module):
                                 'ffnet': ffnet}
             shared = False
 
-
+        if shared_norm:
+            self.shared_norm = nn.LayerNorm(shape)
+        else:
+            self.shared_norm = False
         # ToDO: Try shared norm layer
-        stacked_CNN = [ResidualBlock(conv_layer, shape=shape, shared_weight=shared) for conv_layer in self.main_layers['conv_layers']]
+        stacked_CNN = [ResidualBlock(conv_layer, shape=shape, shared_weight=shared, shared_norm=self.shared_norm) for conv_layer in self.main_layers['conv_layers']]
         self.conv_blocks = nn.Sequential(*stacked_CNN)
         
-        self.self_attn_block = ResidualBlock(self.main_layers['mh_attn'], shape=shape, activation=nn.ReLU, droprate=droprate, shared_weight=shared)
+        self.self_attn_block = ResidualBlock(self.main_layers['mh_attn'], shape=shape, activation=nn.ReLU, droprate=droprate, 
+                                             shared_weight=shared, shared_norm=self.shared_norm)
         
-        self.feed_forward = ResidualBlock(self.main_layers['ffnet'], shape=shape, activation=None, droprate=droprate, shared_weight=shared)
+        self.feed_forward = ResidualBlock(self.main_layers['ffnet'], shape=shape, activation=None, droprate=droprate, 
+                                          shared_weight=shared, shared_norm=self.shared_norm)
 
         
         
@@ -644,9 +652,9 @@ class QANet(nn.Module):
         self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=1)
         
         # ToDo: EncoderBlock shared weights compability for loading weights
-        self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, droprate=droprate)
+        self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, droprate=droprate, shared_norm=True)
         self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, droprate=droprate, 
-                                                  shared_weight=self.context_encoder.main_layers)
+                                                  shared_weight=self.context_encoder.main_layers, shared_norm=True)
         
         self.context_query_attn_layer = ContextQueryAttention(d_model)
         
