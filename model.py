@@ -644,7 +644,7 @@ class QANet(nn.Module):
         # ToDo: EncoderBlock shared weights compability for loading weights
         self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, droprate=droprate)
         self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, droprate=droprate, 
-                                                  shared=self.context_encoder)
+                                                  shared_weight=self.context_encoder.main_layers)
         
         self.context_query_attn_layer = ContextQueryAttention(d_model)
         
