@@ -83,7 +83,7 @@ class Highway(nn.Module):
         #x: shape [batch_size, hidden_size, length]
         dropout = 0.1
         for i in range(self.n):
-            gate = F.sigmoid(self.gate[i](x))
+            gate = torch.sigmoid(self.gate[i](x))
             nonlinear = self.linear[i](x)
             nonlinear = F.dropout(nonlinear, p=dropout, training=self.training)
             x = gate * nonlinear + (1 - gate) * x
