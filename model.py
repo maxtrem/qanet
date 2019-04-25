@@ -684,8 +684,13 @@ class QANet(nn.Module):
             logits_end:   (torch.FloatTensor) logit scores for end of answer in context
         """
 
-        mask_C = (cwids != 0).float()
-        mask_Q = (qwids != 0).float()
+        #mask_C = (cwids != 0).float()
+        #mask_Q = (qwids != 0).float()
+
+        mask_C = (torch.ones_like(cwids) *
+                 0 != cwids).float()
+        mask_Q = (torch.ones_like(qwids) *
+                 0 != qwids).float()
 
         C = self.input_embedding_layer(cwids, ccids)
         Q = self.input_embedding_layer(qwids, qcids)
@@ -732,4 +737,4 @@ class ExponentialMovingAverage():
         
         
         
-
+# ToDO: PosEncoder, AttnFlow, checking masking precedure (*?)
