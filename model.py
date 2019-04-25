@@ -505,6 +505,8 @@ class EncoderBlock(nn.Module):
                                 'ffnet': ffnet}
             shared = False
 
+
+        # ToDO: Try shared norm layer
         stacked_CNN = [ResidualBlock(conv_layer, shape=shape, shared_weight=shared) for conv_layer in self.main_layers['conv_layers']]
         self.conv_blocks = nn.Sequential(*stacked_CNN)
         
