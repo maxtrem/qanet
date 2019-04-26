@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from modules.conv import Initialized_Conv1d
+from modules.helpers import mask_logits, apply_mask
 
 # bangliu
 

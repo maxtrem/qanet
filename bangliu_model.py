@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-from helpers import device, mask_logits, apply_mask
+from modules.helpers import device, mask_logits, apply_mask
 
 
 def PosEncoder(x, min_timescale=1.0, max_timescale=1.0e4):

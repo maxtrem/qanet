@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from modules.helpers import mask_logits, apply_mask
+
+
 class AttentionFlowLayer(nn.Module):
     """
         Attention-Flow-Layer after:
