@@ -248,52 +248,92 @@ class EncoderBlock(nn.Module):
             return inputs + residual
 
 
-class CQAttention(nn.Module):
-    def __init__(self, d_model, dropout=0.1):
+class AttentionFlowLayer(nn.Module):
+    """
+        Attention-Flow-Layer after:
+        Seo, Minjoon, et al. "Bidirectional attention flow for machine comprehension." 
+        arXiv preprint arXiv:1611.01603 (2016).
+    """
+    def __init__(self, d_model):
         super().__init__()
-        w4C = torch.empty(d_model, 1)
-        w4Q = torch.empty(d_model, 1)
-        w4mlu = torch.empty(1, 1, d_model)
-        nn.init.xavier_uniform_(w4C)
-        nn.init.xavier_uniform_(w4Q)
-        nn.init.xavier_uniform_(w4mlu)
-        self.w4C = nn.Parameter(w4C)
-        self.w4Q = nn.Parameter(w4Q)
-        self.w4mlu = nn.Parameter(w4mlu)
-
-        bias = torch.empty(1)
-        nn.init.constant_(bias, 0)
-        self.bias = nn.Parameter(bias)
-        self.dropout = dropout
-
-    def forward(self, C, Q, Cmask, Qmask):
+        self.d_model = d_model
+        self.weight = torch.nn.Parameter(torch.rand(d_model*3))
+        
+    def forward(self, H, U):
+        """
+            Computes an attention flow for H and U. After: w⊤ @ [h; u; h ◦ u]
+            Both parameters H and U are expected to have 3 dimensions: (batch_dim, seq_length, embed_dim)
+            param H: will be used to calculate first dim of attention matrix  (t used as index letter)
+            param U: will be used to calculate second dim of attention matrix (j used as index letter)
+            Where H represents the context paragraph and U represents the query
+        """
+        assert H.dim()    == U.dim() == 3, f"Both H and U are required to have 3 dim, but got shapes: {H.shape} and {U.shape}"
+        assert H.shape[2] == U.shape[2] == self.d_model,   f"Embedding dim needs to be equal for H, U and W, got {H.shape[2]}, {U.shape[2]}, {self.d_model})"
+        assert H.shape[0] == U.shape[0],   f"Both H and U are required to have same batch size, but got: {H.shape[0]} != {U.shape[0]}"
+        b, t, j, d = H.shape[0], H.shape[1], U.shape[1], H.shape[2]
+        
+        # adding columns for H
+        H_expand = H.unsqueeze(2).expand(b, t, j, d)
+        # adding rows for U
+        U_expand = U.unsqueeze(1).expand(b, t, j, d)
+        # elementwise multiplication of vectors for H and U using outer product
+        H_m_U = torch.einsum('btd,bjd->btjd', H, U)
+        concat_out = torch.cat((H_expand, U_expand, H_m_U), dim=3)
+        return torch.einsum('d,btjd->btj', self.weight, concat_out)
+    
+class Context2Query(nn.Module):
+    """ Implements context-to-query attention after:
+        Seo, Minjoon, et al. "Bidirectional attention flow for machine comprehension." 
+        arXiv preprint arXiv:1611.01603 (2016).
+    """
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, S, U, mask=None):
+        """Expected shapes for input tensors:
+            S:  (B, T, J)
+            U:  (B, J, D)
+           U is synonym to query
+           Where B stands for batch, T for context length, J for query length and D for embedding dimension.
+        """
+        assert S.dim() == 3, f"S is required to have 3 dim (B, T, J), but got shape: {S.shape}"
+        assert U.dim() == 3, f"U is required to have 3 dim (B, J, D), but got shape: {U.shape}"
+        assert S.shape[2] == U.shape[1], f"Dimension mismatch for J, got (S and U) {S.shape[2]} and  {U.shape[1]}"
+        S_ = F.softmax(apply_mask(S, mask), dim=2)
+        return torch.einsum('btj,bjd->btd', S_, U)
+    
+    
+class DCNAttention(nn.Module):
+    def __init__(self):
+        super().__init__()
+    def forward(self, S, C, mask_C, mask_Q):
+        S_  = F.softmax(apply_mask(S, mask_Q), dim=2)
+        S__ = F.softmax(apply_mask(S, mask_C), dim=1)
+        return S_ @ S__.transpose(2, 1) @ C
+    
+class ContextQueryAttention(nn.Module):
+    def __init__(self, d_model, droprate=0.0):
+        super().__init__()
+        
+        self.attn_flow_layer = AttentionFlowLayer(d_model=d_model)
+        self.c2q_layer       = Context2Query()
+        self.q2c_layer       = DCNAttention()
+        self.dropout         = nn.Dropout(p=droprate)
+        
+    def forward(self, C, Q, mask_C, mask_Q):
         C = C.transpose(1, 2)
         Q = Q.transpose(1, 2)
-        batch_size_c = C.size()[0]
-        batch_size, Lc, d_model = C.shape
-        batch_size, Lq, d_model = Q.shape
-        S = self.trilinear_for_attention(C, Q)
-        Cmask = Cmask.view(batch_size_c, Lc, 1)
-        Qmask = Qmask.view(batch_size_c, 1, Lq)
-        S1 = F.softmax(mask_logits(S, Qmask), dim=2)
-        S2 = F.softmax(mask_logits(S, Cmask), dim=1)
-        A = torch.bmm(S1, Q)
-        B = torch.bmm(torch.bmm(S1, S2.transpose(1, 2)), C)
-        out = torch.cat([C, A, torch.mul(C, A), torch.mul(C, B)], dim=2)
-        return out.transpose(1, 2)
 
-    def trilinear_for_attention(self, C, Q):
-        batch_size, Lc, d_model = C.shape
-        batch_size, Lq, d_model = Q.shape
-        dropout = self.dropout
-        C = F.dropout(C, p=dropout, training=self.training)
-        Q = F.dropout(Q, p=dropout, training=self.training)
-        subres0 = torch.matmul(C, self.w4C).expand([-1, -1, Lq])
-        subres1 = torch.matmul(Q, self.w4Q).transpose(1, 2).expand([-1, Lc, -1])
-        subres2 = torch.matmul(C * self.w4mlu, Q.transpose(1,2))
-        res = subres0 + subres1 + subres2
-        res += self.bias
-        return res
+        batch_size = C.shape[0]
+        mask_C = mask_C.view(batch_size, -1, 1)  # batch_size, context_limit, 1
+        mask_Q = mask_Q.view(batch_size, 1, -1)  # batch_size, 1, question_limit
+
+
+        S  = self.attn_flow_layer(C, Q)
+        A  = self.c2q_layer(apply_mask(S, mask_Q), Q)
+        B  = self.q2c_layer(S, C, mask_C, mask_Q)
+        return self.dropout(torch.cat((C, A, C*A, C*B), dim=2))
+
 
 
 class Pointer(nn.Module):
@@ -325,7 +365,7 @@ class QANet(nn.Module):
         self.emb = Embedding(wemb_dim, cemb_dim, d_model)
         self.num_head = num_head
         self.emb_enc = EncoderBlock(conv_num=4, d_model=d_model, num_head=num_head, k=7, dropout=0.1)
-        self.cq_att = CQAttention(d_model=d_model)
+        self.cq_att = ContextQueryAttention(d_model=d_model, dropout)
         self.cq_resizer = Initialized_Conv1d(d_model * 4, d_model)
         self.model_enc_blks = nn.ModuleList([EncoderBlock(conv_num=2, d_model=d_model, num_head=num_head, k=5, dropout=0.1) for _ in range(7)])
         self.out = Pointer(d_model)
