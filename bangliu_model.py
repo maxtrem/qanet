@@ -17,7 +17,7 @@ def mask_logits(target, mask):
     mask = mask.type(torch.float32)
     return target * mask + (1 - mask) * (-1e30)  # !!!!!!!!!!!!!!!  do we need * mask after target?
 
-def apply_logits(target, mask):
+def apply_mask(target, mask):
     mask = mask.type(torch.float32)
     return target * mask + (1 - mask) * (-1e30)  # !!!!!!!!!!!!!!!  do we need * mask after target?
 
