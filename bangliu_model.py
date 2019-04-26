@@ -35,7 +35,7 @@ def get_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4):
     return signal
 
 
-from conv import DepthwiseSeparableCNN, DepthwiseSeparableConv, Initialized_Conv1d
+from modules.conv import DepthwiseSeparableCNN, DepthwiseSeparableConv, Initialized_Conv1d
 
 
 class Highway(nn.Module):
