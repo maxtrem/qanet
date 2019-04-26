@@ -35,7 +35,7 @@ def get_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4):
     return signal
 
 
-from modules.conv import DepthwiseSeparableCNN, DepthwiseSeparableConv, Initialized_Conv1d
+from modules.conv import DepthwiseSeparableCNN, DepthwiseSeparableConv, Initialized_Conv1d, RegularConv
 
 
 class Highway(nn.Module):
@@ -82,8 +82,8 @@ class InputEmbedding(nn.Module):
         self.word_D     = self.word_embed.embedding_dim
         self.d_model      = d_model
         self.activation_= activation() if activation else activation
-        self.char_cnn   = DepthwiseSeparableCNN(self.char_D , d_model, kernel_size, dim=char_cnn_type)
-        self.proj_cnn   = DepthwiseSeparableCNN(self.word_D + d_model , d_model, kernel_size, dim=1)
+        self.char_cnn   = RegularConv(self.char_D , d_model, kernel_size, dim=char_cnn_type)
+        self.proj_cnn   = RegularConv(self.word_D + d_model , d_model, 1, dim=1)
         self.word_drop  = nn.Dropout(p=word_droprate)
         self.char_drop  = nn.Dropout(p=char_droprate)
         
