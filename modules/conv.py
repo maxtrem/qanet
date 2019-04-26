@@ -61,7 +61,9 @@ class RegularConv(nn.Module):
 
     def forward(self, x):
         x = self.conv(x)
-        x = self.activ
+        x = self.activation(x)
+        return x
+
 
 class DepthwiseSeparableCNN(nn.Module):
     """
