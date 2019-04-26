@@ -74,6 +74,37 @@ class DepthwiseSeparableConv(nn.Module):
     def forward(self, x):
         return F.relu(self.pointwise_conv(self.depthwise_conv(x)))
 
+class DepthwiseSeparableCNN(nn.Module):
+    """
+    Implements a depthwise separable convolutional layer as defined by:
+    Lukasz Kaiser, Aidan N Gomez, and Francois Chollet. 
+    Depthwise separable convolutions for neural machine translation. arXiv preprint arXiv:1706.03059, 2017.
+    """
+    def __init__(self, chin, chout, kernel_size=7, dim=1, activation=None, bias=True):
+        """
+        # Arguments
+            chin:        (int) number of input channels
+            chout:       (int)  number of output channels
+            kernel_size: (int or tuple) size of the convolving kernel
+            dim:         (int:[1, 2, 3]) type of convolution i.e. dim=2 results in using nn.Conv2d
+            bias:        (bool) controlls usage of bias for convolutional layers
+        """
+        super().__init__()
+        CNN =  getattr(nn, f'Conv{dim}d')
+        self.dim = dim
+        self.depthwise_cnn = CNN(chin, chin, kernel_size=kernel_size, padding=kernel_size // 2, groups=chin, bias=bias)
+        self.pointwise_cnn = CNN(chin, chout, kernel_size=1, bias=bias)
+        self.activation_   = activation() if activation else None
+
+    def activation(self, x):
+        return self.activation_(x) if self.activation_ else x
+
+    def forward(self, x):
+        x = self.depthwise_cnn(x)
+        x = self.pointwise_cnn(x)
+        x = self.activation(x)
+        return x
+
 
 class Highway(nn.Module):
     def __init__(self, layer_num, size):
@@ -91,6 +122,80 @@ class Highway(nn.Module):
             nonlinear = F.dropout(nonlinear, p=dropout, training=self.training)
             x = gate * nonlinear + (1 - gate) * x
         return x
+
+class InputEmbedding(nn.Module):
+    """
+        InputEmbedding converts both token and character IDs into a single embedding.
+        First IDs are feed into an embedding layer. Embedded characters are then projected to `d_model` dim using a CNN,
+        are then concatenated with the token embeddings and projected again to `d_model` dim using another CNN.
+        Finally these embeddings are feed into a two layer Highway network.
+    """
+    def __init__(self, word_emb_matrix, char_emb_matrix, d_model=128, kernel_size=5, freeze_word_emb=True, freeze_ch_emb=False, char_cnn_type=1, activation=nn.ReLU, word_droprate=0.1, char_droprate=0.05):
+        """
+        # Arguments
+            char_cnn_type:   (numpy.ndarray or torch.tensor) weight matrix containing the character embeddings
+            word_emb_matrix: (numpy.ndarray or torch.tensor) weight matrix containing the word embeddings
+            d_model:         (int) dimensionality of the model
+            kernel_size:     (int or tuple) size of the convolving kernel
+            freeze_word_emb: (bool) if set True word embeddings are froozen and not optimized
+            freeze_ch_emb:   (bool) if set True character embeddings are froozen and not optimized
+            char_cnn_type:   (int) sets dimensionality of convolution operation
+            activation:      sets the activation function for the network, valid options can be seen in
+                             the "torch.nn.modules.activation" module. Use None for no activation
+        """
+        super().__init__()
+        self.char_embed = nn.Embedding.from_pretrained(torch.tensor(char_emb_matrix), freeze=freeze_ch_emb)
+        self.word_embed = nn.Embedding.from_pretrained(torch.tensor(word_emb_matrix), freeze=freeze_word_emb)
+        self.char_D     = self.char_embed.embedding_dim
+        self.word_D     = self.word_embed.embedding_dim
+        self.d_model      = d_model
+        self.activation_= activation() if activation else activation
+        self.char_cnn   = DepthwiseSeparableCNN(self.char_D , d_model, kernel_size, dim=char_cnn_type)
+        self.proj_cnn   = DepthwiseSeparableCNN(self.word_D + d_model , d_model, kernel_size, dim=1)
+        self.word_drop  = nn.Dropout(p=word_droprate)
+        self.char_drop  = nn.Dropout(p=char_droprate)
+        
+        self.highway    = Highway(2, d_model)
+        
+    def activation(self, x):
+        return self.activation_(x) if self.activation_ else x
+        
+    def forward_chars(self, chars):
+        # using 1D CNN
+        if self.char_cnn.dim == 1:
+            x = self.char_embed(chars)
+            N, TOK_LIM, CHAR_LIM, EMBED_DIM = x.shape
+            # CNN Input: (N, C, L) - merge Batch and Sequence / Time dimension, transpose input (N, L, C) to (N, C, L)
+            x = self.char_cnn(x.view(N*TOK_LIM, CHAR_LIM, EMBED_DIM).transpose(1, 2))
+            # collapse last dimension using max
+            x = x.max(dim=-1)[0]
+            # transpose to match word embedding shape (switch L and D/C), 
+            x = self.activation(x).view(N, TOK_LIM, self.d_model).transpose(1, 2)
+            return x
+        # using 2D CNN
+        elif self.char_cnn.dim == 2:
+            x = self.char_embed(chars)
+            # permute from (N, TOK_LIM, CHAR_LIM, C) to (N, C, TOK_LIM, CHAR_LIM)
+            # apply CNN, collapse last dimension using max
+            x = self.char_cnn(x.permute(0, 3, 1, 2)).max(dim=-1)[0]
+            return self.activation(x)
+
+            
+    def forward(self, token_ids, char_ids):
+        """
+        # Arguments
+            token_ids: (torch.LongTensor) a tensor containing token IDs
+            char_ids:  (torch.LongTensor) a tensor containing token IDs
+        # Result
+            Returns an embedding which combines both token and character embedding, using CNN and a Highway network.
+        """
+        embedded_chars = self.char_drop(self.forward_chars(char_ids))
+        # forward word embedding, transpose L and D 
+        embedded_words = self.word_drop(self.word_embed(token_ids).transpose(1, 2))
+        # concat char and word embeddings and forward projection cnn
+        x = self.proj_cnn(torch.cat((embedded_words, embedded_chars), dim=1))
+        x = self.activation(x)
+        return self.highway(x)
 
 class SelfAttention(nn.Module):
     """
@@ -174,34 +279,6 @@ class SelfAttention(nn.Module):
             x = self.scaledDotProduct(K, Q, V, mask).transpose(-2, -1)
             x = x.reshape(batch_size, self.d_model, -1) # removed transpose(-2, -1) before reshape
             return self.project(x, -1)
-
-
-
-
-class Embedding(nn.Module):
-    def __init__(self, wemb_dim, cemb_dim, d_model,
-                 dropout_w=0.1, dropout_c=0.05):
-        super().__init__()
-        self.conv2d = nn.Conv2d(cemb_dim, d_model, kernel_size = (1,5), padding=0, bias=True)
-        nn.init.kaiming_normal_(self.conv2d.weight, nonlinearity='relu')
-        self.conv1d = Initialized_Conv1d(wemb_dim + d_model, d_model, bias=False)
-        self.high = Highway(2, d_model)
-        self.dropout_w = dropout_w
-        self.dropout_c = dropout_c
-
-    def forward(self, ch_emb, wd_emb, length):
-        ch_emb = ch_emb.permute(0, 3, 1, 2)
-        ch_emb = F.dropout(ch_emb, p=self.dropout_c, training=self.training)
-        ch_emb = self.conv2d(ch_emb)
-        ch_emb = F.relu(ch_emb)
-        ch_emb, _ = torch.max(ch_emb, dim=3)
-
-        wd_emb = F.dropout(wd_emb, p=self.dropout_w, training=self.training)
-        wd_emb = wd_emb.transpose(1, 2)
-        emb = torch.cat([ch_emb, wd_emb], dim=1)
-        emb = self.conv1d(emb)
-        emb = self.high(emb)
-        return emb
 
 
 class EncoderBlock(nn.Module):
@@ -339,14 +416,8 @@ class QANet(nn.Module):
                  c_max_len, q_max_len, d_model, train_cemb=False, pad=0,
                  dropout=0.1, num_head=1):  # !!! notice: set it to be a config parameter later.
         super().__init__()
-        if train_cemb:
-            self.char_emb = nn.Embedding.from_pretrained(char_mat, freeze=False)
-        else:
-            self.char_emb = nn.Embedding.from_pretrained(char_mat)
-        self.word_emb = nn.Embedding.from_pretrained(word_mat)
-        wemb_dim = word_mat.shape[1]
-        cemb_dim = char_mat.shape[1]
-        self.emb = Embedding(wemb_dim, cemb_dim, d_model)
+
+        self.emb = InputEmbedding(wemb_dim, cemb_dim, d_model)
         self.num_head = num_head
         self.emb_enc = EncoderBlock(conv_num=4, d_model=d_model, num_head=num_head, k=7, dropout=0.1)
         self.cq_att = ContextQueryAttention(d_model, dropout)
@@ -363,9 +434,7 @@ class QANet(nn.Module):
                  self.PAD != Cwid).float()
         maskQ = (torch.ones_like(Qwid) *
                  self.PAD != Qwid).float()
-        Cw, Cc = self.word_emb(Cwid), self.char_emb(Ccid)
-        Qw, Qc = self.word_emb(Qwid), self.char_emb(Qcid)
-        C, Q = self.emb(Cc, Cw, self.Lc), self.emb(Qc, Qw, self.Lq)
+        C, Q = self.emb(Cc, Cw), self.emb(Qc, Qw)
         Ce = self.emb_enc(C, maskC, 1, 1)
         Qe = self.emb_enc(Q, maskQ, 1, 1)
         X = self.cq_att(Ce, Qe, maskC, maskQ)
