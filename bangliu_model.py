@@ -62,7 +62,7 @@ class InputEmbedding(nn.Module):
         are then concatenated with the token embeddings and projected again to `d_model` dim using another CNN.
         Finally these embeddings are feed into a two layer Highway network.
     """
-    def __init__(self, word_emb_matrix, char_emb_matrix, d_model=128, kernel_size=5, freeze_word_emb=True, freeze_ch_emb=False, char_cnn_type=1, activation=nn.ReLU, word_droprate=0.1, char_droprate=0.05):
+    def __init__(self, word_emb_matrix, char_emb_matrix, d_model=128, kernel_size=(1,5), freeze_word_emb=True, freeze_ch_emb=False, char_cnn_type=2, activation=nn.ReLU, word_droprate=0.1, char_droprate=0.05):
         """
         # Arguments
             char_cnn_type:   (numpy.ndarray or torch.tensor) weight matrix containing the character embeddings
