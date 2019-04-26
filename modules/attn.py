@@ -1,5 +1,5 @@
 
-from conv import Initialized_Conv1d
+from modules.conv import Initialized_Conv1d
 
 # bangliu
 
