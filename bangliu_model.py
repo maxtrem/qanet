@@ -261,85 +261,62 @@ class AttentionFlowLayer(nn.Module):
         Seo, Minjoon, et al. "Bidirectional attention flow for machine comprehension." 
         arXiv preprint arXiv:1611.01603 (2016).
     """
-    def __init__(self, d_model):
+    def __init__(self, d_model, droprate=0.1):
         super().__init__()
         self.d_model = d_model
-        self.weight = torch.nn.Parameter(torch.rand(d_model*3))
+        self.weight_C   = torch.nn.Parameter(torch.rand(d_model))
+        self.weight_Q   = torch.nn.Parameter(torch.rand(d_model))
+        self.weight_CmQ = torch.nn.Parameter(torch.rand(d_model))
+        self.bias       = nn.Parameter(torch.zeros(1, dtype=torch.float))
+        self.dropout    = nn.Dropout(droprate)
+
+
         
-    def forward(self, H, U):
+    def forward(self, C, Q):
         """
-            Computes an attention flow for H and U. After: w⊤ @ [h; u; h ◦ u]
-            Both parameters H and U are expected to have 3 dimensions: (batch_dim, seq_length, embed_dim)
-            param H: will be used to calculate first dim of attention matrix  (t used as index letter)
-            param U: will be used to calculate second dim of attention matrix (j used as index letter)
-            Where H represents the context paragraph and U represents the query
+            Computes an attention flow for C and Q. After: w⊤ @ [c; q; c ◦ q]
+            Both parameters C and Q are expected to have 3 dimensions: (batch_dim, seq_length, embed_dim)
+            param C: will be used to calculate first dim of attention matrix  (t used as index letter)
+            param Q: will be used to calculate second dim of attention matrix (j used as index letter)
+            Where C represents the context paragraph and Q represents the query
+
+
         """
-        assert H.dim()    == U.dim() == 3, f"Both H and U are required to have 3 dim, but got shapes: {H.shape} and {U.shape}"
-        assert H.shape[2] == U.shape[2] == self.d_model,   f"Embedding dim needs to be equal for H, U and W, got {H.shape[2]}, {U.shape[2]}, {self.d_model})"
-        assert H.shape[0] == U.shape[0],   f"Both H and U are required to have same batch size, but got: {H.shape[0]} != {U.shape[0]}"
-        b, t, j, d = H.shape[0], H.shape[1], U.shape[1], H.shape[2]
-        
-        # adding columns for H
-        H_expand = H.unsqueeze(2).expand(b, t, j, d)
-        # adding rows for U
-        U_expand = U.unsqueeze(1).expand(b, t, j, d)
-        # elementwise multiplication of vectors for H and U using outer product
-        H_m_U = torch.einsum('btd,bjd->btjd', H, U)
-        concat_out = torch.cat((H_expand, U_expand, H_m_U), dim=3)
-        return torch.einsum('d,btjd->btj', self.weight, concat_out)
-    
-class Context2Query(nn.Module):
-    """ Implements context-to-query attention after:
-        Seo, Minjoon, et al. "Bidirectional attention flow for machine comprehension." 
-        arXiv preprint arXiv:1611.01603 (2016).
-    """
-    def __init__(self):
-        super().__init__()
-        
-    def forward(self, S, U, mask):
-        """Expected shapes for input tensors:
-            S:  (B, T, J)
-            U:  (B, J, D)
-           U is synonym to query
-           Where B stands for batch, T for context length, J for query length and D for embedding dimension.
-        """
-        assert S.dim() == 3, f"S is required to have 3 dim (B, T, J), but got shape: {S.shape}"
-        assert U.dim() == 3, f"U is required to have 3 dim (B, J, D), but got shape: {U.shape}"
-        assert S.shape[2] == U.shape[1], f"Dimension mismatch for J, got (S and U) {S.shape[2]} and  {U.shape[1]}"
-        S_ = F.softmax(apply_mask(S, mask), dim=2)
-        return torch.einsum('btj,bjd->btd', S_, U)
-    
-    
-class DCNAttention(nn.Module):
-    def __init__(self):
-        super().__init__()
-    def forward(self, S, C, mask_C, mask_Q):
-        S_  = F.softmax(apply_mask(S, mask_Q), dim=2)
-        S__ = F.softmax(apply_mask(S, mask_C), dim=1)
-        return S_ @ S__.transpose(2, 1) @ C
-    
+        assert C.dim()    == Q.dim() == 3, f"Both C and Q are required to have 3 dim, but got shapes: {C.shape} and {Q.shape}"
+        assert C.shape[2] == Q.shape[2] == self.d_model,   f"Embedding dim needs to be equal for C, Q and weights, got ({C.shape[2]}, {Q.shape[2]}, {self.d_model})"
+        assert C.shape[0] == Q.shape[0],   f"Both C and Q are required to have same batch size, but got: {C.shape[0]} != {Q.shape[0]}"
+        b, t, j, d = C.shape[0], C.shape[1], Q.shape[1], C.shape[2]
+        C = self.dropout(C)
+        Q = self.dropout(Q)
+        p1 = (C @ self.weight_C).expand([-1, -1, j])
+        p2 = (Q @ self.weight_Q).transpose(1, 2).expand([-1, t, -1])
+        p3 = torch.einsum('btd,d,bjd->btj', C, self.weight_CmQ, Q)
+        return p1+p2+p3 + self.bias
+
 class ContextQueryAttention(nn.Module):
     def __init__(self, d_model, droprate=0.0):
         super().__init__()
-        
-        self.attn_flow_layer = AttentionFlowLayer(d_model=d_model)
-        self.c2q_layer       = Context2Query()
-        self.q2c_layer       = DCNAttention()
-        self.dropout         = nn.Dropout(p=droprate)
+        self.attn_flow_layer = AttentionFlowLayer(d_model, droprate)
         
     def forward(self, C, Q, mask_C, mask_Q):
+        C_len, Q_len = C.shape[-1], Q.shape[-1]
+        
         C = C.transpose(1, 2)
         Q = Q.transpose(1, 2)
-
-        batch_size = C.shape[0]
-        mask_C = mask_C.view(batch_size, -1, 1)  # batch_size, context_limit, 1
-        mask_Q = mask_Q.view(batch_size, 1, -1)  # batch_size, 1, question_limit
-
-
+        
         S  = self.attn_flow_layer(C, Q)
-        A  = self.c2q_layer(S, Q, mask_Q)
-        B  = self.q2c_layer(S, C, mask_C, mask_Q)
-        return self.dropout(torch.cat((C, A, C*A, C*B), dim=2)).transpose(1, 2)
+        
+        mask_C = mask_C.view(-1, C_len, 1)
+        mask_Q = mask_Q.view(-1, 1, Q_len)
+        
+        S_  = F.softmax(mask_logits(S, mask_Q), dim=2)
+        S__ = F.softmax(mask_logits(S, mask_C), dim=1)
+        
+        # Context2Query
+        A  = S_ @ Q
+        # Query2Context - DCNAttention
+        B  = S_ @ S__.transpose(2, 1) @ C # torch.einsum('btj,bkj,bkd->btd', S_, S__, C)
+        return torch.cat((C, A, C*A, C*B), dim=2).transpose(1, 2)
 
 
 
