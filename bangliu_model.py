@@ -417,7 +417,7 @@ class QANet(nn.Module):
                  dropout=0.1, num_head=1):  # !!! notice: set it to be a config parameter later.
         super().__init__()
 
-        self.emb = InputEmbedding(wemb_dim, cemb_dim, d_model)
+        self.emb = InputEmbedding(word_mat, char_mat, d_model)
         self.num_head = num_head
         self.emb_enc = EncoderBlock(conv_num=4, d_model=d_model, num_head=num_head, k=7, dropout=0.1)
         self.cq_att = ContextQueryAttention(d_model, dropout)
@@ -434,7 +434,7 @@ class QANet(nn.Module):
                  self.PAD != Cwid).float()
         maskQ = (torch.ones_like(Qwid) *
                  self.PAD != Qwid).float()
-        C, Q = self.emb(Cc, Cw), self.emb(Qc, Qw)
+        C, Q = self.emb(Cwid, Ccid), self.emb(Qwid, Qcid)
         Ce = self.emb_enc(C, maskC, 1, 1)
         Qe = self.emb_enc(Q, maskQ, 1, 1)
         X = self.cq_att(Ce, Qe, maskC, maskQ)
