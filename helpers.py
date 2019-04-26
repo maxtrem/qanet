@@ -11,5 +11,13 @@ def upload(path):
     session.quit()
 
 
-def apply_mask(target, mask, eps=-1e30):
-    return target * mask + (1 - mask) * (eps)
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+def mask_logits(target, mask):
+    mask = mask.type(torch.float32)
+    return target * mask + (1 - mask) * (-1e30)  # !!!!!!!!!!!!!!!  do we need * mask after target?
+
+def apply_mask(target, mask):
+    mask = mask.type(torch.float32)
+    return target * mask + (1 - mask) * (-1e30)  # !!!!!!!!!!!!!!!  do we need * mask after target?

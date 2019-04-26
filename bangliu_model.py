@@ -10,38 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-def mask_logits(target, mask):
-    mask = mask.type(torch.float32)
-    return target * mask + (1 - mask) * (-1e30)  # !!!!!!!!!!!!!!!  do we need * mask after target?
-
-def apply_mask(target, mask):
-    mask = mask.type(torch.float32)
-    return target * mask + (1 - mask) * (-1e30)  # !!!!!!!!!!!!!!!  do we need * mask after target?
-
-class Initialized_Conv1d(nn.Module):
-    def __init__(self, in_channels, out_channels,
-                 kernel_size=1, stride=1, padding=0, groups=1,
-                 relu=False, bias=False):
-        super().__init__()
-        self.out = nn.Conv1d(
-            in_channels, out_channels,
-            kernel_size, stride=stride,
-            padding=padding, groups=groups, bias=bias)
-        if relu is True:
-            self.relu = True
-            nn.init.kaiming_normal_(self.out.weight, nonlinearity='relu')
-        else:
-            self.relu = False
-            nn.init.xavier_uniform_(self.out.weight)
-
-    def forward(self, x):
-        if self.relu is True:
-            return F.relu(self.out(x))
-        else:
-            return self.out(x)
+from helpers import device, mask_logits, apply_mask
 
 
 def PosEncoder(x, min_timescale=1.0, max_timescale=1.0e4):
@@ -66,44 +35,7 @@ def get_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4):
     return signal
 
 
-class DepthwiseSeparableConv(nn.Module):
-    def __init__(self, in_ch, out_ch, k, bias=True):
-        super().__init__()
-        self.depthwise_conv = nn.Conv1d(in_channels=in_ch, out_channels=in_ch, kernel_size=k, groups=in_ch, padding=k // 2, bias=False)
-        self.pointwise_conv = nn.Conv1d(in_channels=in_ch, out_channels=out_ch, kernel_size=1, padding=0, bias=bias)
-    def forward(self, x):
-        return F.relu(self.pointwise_conv(self.depthwise_conv(x)))
-
-class DepthwiseSeparableCNN(nn.Module):
-    """
-    Implements a depthwise separable convolutional layer as defined by:
-    Lukasz Kaiser, Aidan N Gomez, and Francois Chollet. 
-    Depthwise separable convolutions for neural machine translation. arXiv preprint arXiv:1706.03059, 2017.
-    """
-    def __init__(self, chin, chout, kernel_size=7, dim=1, activation=None, bias=True):
-        """
-        # Arguments
-            chin:        (int) number of input channels
-            chout:       (int)  number of output channels
-            kernel_size: (int or tuple) size of the convolving kernel
-            dim:         (int:[1, 2, 3]) type of convolution i.e. dim=2 results in using nn.Conv2d
-            bias:        (bool) controlls usage of bias for convolutional layers
-        """
-        super().__init__()
-        CNN =  getattr(nn, f'Conv{dim}d')
-        self.dim = dim
-        self.depthwise_cnn = CNN(chin, chin, kernel_size=kernel_size, padding=kernel_size // 2, groups=chin, bias=bias)
-        self.pointwise_cnn = CNN(chin, chout, kernel_size=1, bias=bias)
-        self.activation_   = activation() if activation else None
-
-    def activation(self, x):
-        return self.activation_(x) if self.activation_ else x
-
-    def forward(self, x):
-        x = self.depthwise_cnn(x)
-        x = self.pointwise_cnn(x)
-        x = self.activation(x)
-        return x
+from conv import DepthwiseSeparableCNN, DepthwiseSeparableConv, Initialized_Conv1d
 
 
 class Highway(nn.Module):
@@ -197,88 +129,7 @@ class InputEmbedding(nn.Module):
         x = self.activation(x)
         return self.highway(x)
 
-class SelfAttention(nn.Module):
-    """
-    Implements Multi-Head self-attention as defined by:
-    Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. 
-    Attention is all you need. CoRR, abs/1706.03762, 2017a. URL http://arxiv.org/abs/1706.03762.
-    """
-    def __init__(self, d_model, num_heads, dropout, proj_type=2):
-        """
-            Multi-Head-Attention
-            # Arguments
-                h:         (int) number of heads
-                d:         (int) dimensionality of the model
-                proj_type: (int) determines the projection type (0:None, 1:nn.Linear, 2:nn.Conv1d)
-        """
-        super().__init__()
-        self.d_model = d_model
-        self.h   = num_heads
-        self.d_h = d_model // num_heads
-        self.proj_type = proj_type
-        if proj_type == 1:
-            self.projections = nn.ModuleList([nn.Linear(d_model, d_model) for _ in range(4)])
-        elif proj_type == 2:
-            self.projections = nn.ModuleList([Initialized_Conv1d(in_channels=d_model, out_channels=d_model, kernel_size=1) for _ in range(4)])
-        
-        self.dropout = nn.Dropout(dropout)
-        
-    def scaledDotProduct(self, Q, K, V, mask=None):
-        logits = Q @ K.transpose(-2, -1)/math.sqrt(self.d_h)
-        
-        if mask is not None:
-            shapes = [x  if x != None else -1 for x in list(logits.size())]
-            mask = mask.view(shapes[0], 1, 1, shapes[-1])
-            logits = apply_mask(logits, mask)
-            
-        S = F.softmax(logits, dim=-1)
-        S = self.dropout(S)
-        #print(Q.shape, K.transpose(-2, -1).shape, '-->', S.shape)
-        return (S @ V)
-    
-    def forward(self, x, mask=None):
-        """
-            
-        """
-        if self.proj_type == 1:
-            x = x.transpose(1, 2)
-        return self.forward_(x, x, x, mask)
-    
-    def project(self, x, i):
-        if self.proj_type == 0:
-            return x
-        else:
-            return self.projections[i](x)
-        
-    def forward_(self, Q, K, V, mask=None):
-        batch_size = K.shape[0]
-        
-        K, Q, V = (self.project(x, i) for i, x in enumerate((K, Q, V)))
-        if self.proj_type == 1:
-            # linear projection
-            # input (B, L, D)
-            # reshape to (B, L, H, DH) - splitting up D to number of heads
-            # transpose to (B, H, L, DH) for matmul
-            K = K.view(batch_size, -1, self.h, self.d_h).transpose(1,2)
-            Q = Q.view(batch_size, -1, self.h, self.d_h).transpose(1,2)
-            V = V.view(batch_size, -1, self.h, self.d_h).transpose(1,2)
-
-
-            x = self.scaledDotProduct(K, Q, V, mask)#.transpose(1, 2)
-            x = x.reshape(batch_size, -1, self.d_model)
-            return self.project(x, -1)
-        
-        else:
-            # CNN and None projection
-            # input (B, D, L)
-            # reshape to (B, H, DH, L) - splitting up D to number of heads
-            # transpose to (B, H, L, DH), transpose not needed for self-attention, needs to be checkt if Q,K,V differ
-            Q = Q.view(batch_size, self.h, self.d_h, -1).transpose(-2, -1)
-            K = K.view(batch_size, self.h, self.d_h, -1).transpose(-2, -1)
-            V = V.view(batch_size, self.h, self.d_h, -1).transpose(-2, -1)
-            x = self.scaledDotProduct(K, Q, V, mask).transpose(-2, -1)
-            x = x.reshape(batch_size, self.d_model, -1) # removed transpose(-2, -1) before reshape
-            return self.project(x, -1)
+from modules.attn import SelfAttention
 
 
 class EncoderBlock(nn.Module):
