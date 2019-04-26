@@ -292,7 +292,7 @@ class Context2Query(nn.Module):
     def __init__(self):
         super().__init__()
         
-    def forward(self, S, U, mask=None):
+    def forward(self, S, U, mask):
         """Expected shapes for input tensors:
             S:  (B, T, J)
             U:  (B, J, D)
@@ -332,7 +332,7 @@ class ContextQueryAttention(nn.Module):
         mask_Q = mask_Q.view(batch_size, 1, -1)  # batch_size, 1, question_limit
 
 
-        S  = self.attn_flow_layer(C, Q)
+        S  = self.attn_flow_layer(C, Q, mask_Q)
         A  = self.c2q_layer(apply_mask(S, mask_Q), Q)
         B  = self.q2c_layer(S, C, mask_C, mask_Q)
         return self.dropout(torch.cat((C, A, C*A, C*B), dim=2))
