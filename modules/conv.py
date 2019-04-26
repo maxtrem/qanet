@@ -44,9 +44,15 @@ class RegularConv(nn.Module):
 
         self.dim = dim
         CNN =  getattr(nn, f'Conv{dim}d')
+        
+        if isinstance(kernel_size, tuple):
+            padding = tuple(map(lambda k: k // 2, kernel_size))
+        else:
+            padding = kernel_size // 2
+
         self.conv = CNN(
             in_channels, out_channels,
-            kernel_size, padding=kernel_size // 2, 
+            kernel_size, padding=0, 
             bias=bias)
         self.activation_ = activation() if activation else None
 
