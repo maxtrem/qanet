@@ -565,8 +565,8 @@ class AttentionFlowLayer(nn.Module):
     def __init__(self, d_model, droprate=0.1):
         super().__init__()
         self.d_model = d_model
-        self.weight_C   = torch.nn.Parameter(torch.rand(d_model))
-        self.weight_Q   = torch.nn.Parameter(torch.rand(d_model))
+        self.weight_C   = torch.nn.Parameter(torch.rand(d_model, 1))
+        self.weight_Q   = torch.nn.Parameter(torch.rand(d_model, 1))
         self.weight_CmQ = torch.nn.Parameter(torch.rand(d_model))
         self.bias       = nn.Parameter(torch.zeros(1, dtype=torch.float))
         self.dropout    = nn.Dropout(droprate)
