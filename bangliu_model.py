@@ -126,7 +126,6 @@ class InputEmbedding(nn.Module):
         embedded_words = self.word_drop(self.word_embed(token_ids).transpose(1, 2))
         # concat char and word embeddings and forward projection cnn
         x = self.proj_cnn(torch.cat((embedded_words, embedded_chars), dim=1))
-        x = self.activation(x)
         return self.highway(x)
 
 from modules.attn import SelfAttention
