@@ -332,10 +332,10 @@ class ContextQueryAttention(nn.Module):
         mask_Q = mask_Q.view(batch_size, 1, -1)  # batch_size, 1, question_limit
 
 
-        S  = self.attn_flow_layer(C, Q, mask_Q)
-        A  = self.c2q_layer(apply_mask(S, mask_Q), Q)
+        S  = self.attn_flow_layer(C, Q)
+        A  = self.c2q_layer(S, Q, mask_Q)
         B  = self.q2c_layer(S, C, mask_C, mask_Q)
-        return self.dropout(torch.cat((C, A, C*A, C*B), dim=2))
+        return self.dropout(torch.cat((C, A, C*A, C*B), dim=2)).transpose(1, 2)
 
 
 
