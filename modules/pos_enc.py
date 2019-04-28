@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-import numpy as np
-import torch
+import math 
+
 class PositionalEncoding(nn.Module):
     def __init__(self, dim, max_len):
         super().__init__()
