@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from modules.helpers import device, mask_logits, apply_mask
 
 
-def PosEncoder(x, min_timescale=1.0, max_timescale=1.0e4):
+"""def PosEncoder(x, min_timescale=1.0, max_timescale=1.0e4):
     x = x.transpose(1, 2)
     length = x.size()[1]
     channels = x.size()[2]
@@ -32,7 +32,10 @@ def get_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4):
     m = nn.ZeroPad2d((0, (channels % 2), 0, 0))
     signal = m(signal)
     signal = signal.view(1, length, channels)
-    return signal
+    return signal"""
+
+from modules.pos_enc import PositionalEncoding
+PosEncoder = PositionalEncoding(dim=128, max_len=400)
 
 
 from modules.conv import DepthwiseSeparableCNN, DepthwiseSeparableConv, Initialized_Conv1d, RegularConv
