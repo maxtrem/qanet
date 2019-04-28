@@ -35,7 +35,7 @@ def get_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4):
     return signal"""
 
 from modules.pos_enc import PositionalEncoding
-PosEncoder = PositionalEncoding(dim=128, max_len=400)
+PosEncoder = PositionalEncoding(dim=128, max_len=400).to(device)
 
 
 from modules.conv import DepthwiseSeparableCNN, DepthwiseSeparableConv, Initialized_Conv1d, RegularConv
