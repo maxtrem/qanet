@@ -21,4 +21,5 @@ class PositionalEncoding(nn.Module):
         return pos_enc_matrix.t().contiguous()
     
     def forward(self, x):
-        return x + self.pos_encoding[:,:x.shape[-1]]
+        x_dim, x_len = x.shape[-2:]
+        return x + self.pos_encoding[:x_dim,:x_len]
