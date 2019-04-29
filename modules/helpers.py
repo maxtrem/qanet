@@ -21,3 +21,12 @@ def mask_logits(target, mask):
 def apply_mask(target, mask):
     mask = mask.type(torch.float32)
     return target * mask + (1 - mask) * (-1e30)  # !!!!!!!!!!!!!!!  do we need * mask after target?
+
+
+class Activation(nn.Module):
+    def __init__(self, activation=None):
+        super().__init__()
+        self.activation = activation
+        
+    def forward(self, x):
+        return self.activation(x) if self.activation else x
