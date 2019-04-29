@@ -8,7 +8,7 @@ from modules.helpers import mask_logits, apply_mask
 
 # bangliu
 
-class SelfAttention(nn.Module):
+class MultiHeadAttnBL(nn.Module):
     def __init__(self, d_model, heads, droprate):
         super().__init__()
         self.d_model = d_model
