@@ -113,7 +113,7 @@ class EncoderBlock(nn.Module):
 
         else:
             conv_layers = [DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size, activation=nn.ReLU) for _ in range(num_conv_layers)]
-            mh_attn = MultiHeadAttn(d_model=d_model, heads=8, proj_type=2)
+            mh_attn = MultiHeadAttn(d_model=d_model, num_head=8, dropout=droprate, proj_type=2)
             ffnet = Initialized_Conv1d(d_model, d_model, relu=True, bias=True)
 
             self.main_layers = {'conv_layers': conv_layers,
