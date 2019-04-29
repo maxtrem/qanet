@@ -70,6 +70,9 @@ class QANet(nn.Module):
 
         self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=2)
 
+
+        # TODO !!: ReImplement EncoderBlock: merging, simplify / PosEnc / LayerNorm with transpose
+        # DepthwiseSeparableCNN Stack needs to contain ResidualBlocks for every single layer
         self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate, shared_norm=False)
         self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, kernel_size=7, droprate=droprate, 
                                                   shared_weight=self.context_encoder.main_layers)
@@ -78,6 +81,8 @@ class QANet(nn.Module):
         
         self.CQ_projection         = Initialized_Conv1d(d_model * 4, d_model)
         
+        # TODO !!: ReImplement EncoderBlock: merging, simplify / PosEnc / LayerNorm with transpose
+        # DepthwiseSeparableCNN Stack needs to contain ResidualBlocks for every single layer
         stacked_encoder_blocks     = [EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=5, num_conv_layers=2, droprate=droprate) for _ in range(7)]
         self.stacked_enc_block     = nn.Sequential(*stacked_encoder_blocks)
         
