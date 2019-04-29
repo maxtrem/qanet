@@ -22,7 +22,7 @@ class FeedForward(nn.Module):
         self.bias    = bias
         self.use_cnn = use_cnn
         if use_cnn:
-            self.ff_layer = Initialized_Conv1d(size, size, relu=False, bias=True)
+            self.ff_layer = Initialized_Conv1d(in_features, out_features, relu=False, bias=True)
             
         else:
             self.ff_layer = nn.Linear(in_features, out_features, bias)

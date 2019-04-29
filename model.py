@@ -114,7 +114,7 @@ class EncoderBlock(nn.Module):
         else:
             conv_layers = [DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size, activation=nn.ReLU) for _ in range(num_conv_layers)]
             mh_attn = MultiHeadAttnC(d_model=d_model, heads=8, proj_type=2)
-            ffnet = FeedForward(d_model, d_model, activation=nn.ReLU)
+            ffnet = Initialized_Conv1d(d_model, d_model, relu=True, bias=True)
 
             self.main_layers = {'conv_layers': conv_layers,
                                 'mh_attn': mh_attn,
@@ -129,10 +129,10 @@ class EncoderBlock(nn.Module):
         stacked_CNN = [ResidualBlock(conv_layer, shape=shape, shared_weight=shared, shared_norm=self.shared_norm) for conv_layer in self.main_layers['conv_layers']]
         self.conv_blocks = nn.Sequential(*stacked_CNN)
         
-        self.self_attn_block = ResidualBlock(self.main_layers['mh_attn'], shape=shape, activation=nn.ReLU, droprate=droprate, 
+        self.self_attn_block = ResidualBlock(self.main_layers['mh_attn'], shape=shape, activation=None, droprate=droprate, ##RELU??
                                              shared_weight=shared, shared_norm=self.shared_norm)
         
-        self.feed_forward = ResidualBlock(self.main_layers['ffnet'], shape=shape, activation=nn.ReLU, droprate=droprate, 
+        self.feed_forward = ResidualBlock(self.main_layers['ffnet'], shape=shape, activation=None, droprate=droprate, 
                                           shared_weight=shared, shared_norm=self.shared_norm)
 
         
