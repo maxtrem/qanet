@@ -130,14 +130,14 @@ class InputEmbedding(nn.Module):
         x = self.proj_cnn(torch.cat((embedded_words, embedded_chars), dim=1))
         return self.highway(x)
 
-from modules.attn import SelfAttention
+from modules.attn import MultiHeadAttnBL as SelfAttention
 
 
 class EncoderBlock(nn.Module):
     def __init__(self, conv_num, d_model, heads, k, dropout=0.1, pos_encoder=None):
         super().__init__()
         self.convs = nn.ModuleList([DepthwiseSeparableConv(d_model, d_model, k) for _ in range(conv_num)])
-        self.self_att = SelfAttention(d_model, heads, dropout=dropout)
+        self.self_att = SelfAttention(d_model, heads, droprate=dropout)
         self.FFN_1 = Initialized_Conv1d(d_model, d_model, relu=True, bias=True)
         self.FFN_2 = Initialized_Conv1d(d_model, d_model, bias=True)
         self.norm_C = nn.ModuleList([nn.LayerNorm(d_model) for _ in range(conv_num)])
