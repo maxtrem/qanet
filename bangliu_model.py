@@ -35,7 +35,6 @@ def get_timing_signal(length, channels, min_timescale=1.0, max_timescale=1.0e4):
     return signal"""
 
 from modules.pos_enc import PositionalEncoding
-PosEncoder = PositionalEncoding(dim=128, max_len=400).to(device)
 
 
 from modules.conv import DepthwiseSeparableCNN, DepthwiseSeparableConv, Initialized_Conv1d, RegularConv
@@ -135,7 +134,7 @@ from modules.attn import SelfAttention
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, conv_num, d_model, num_head, k, dropout=0.1):
+    def __init__(self, conv_num, d_model, num_head, k, dropout=0.1, pos_encoder=None):
         super().__init__()
         self.convs = nn.ModuleList([DepthwiseSeparableConv(d_model, d_model, k) for _ in range(conv_num)])
         self.self_att = SelfAttention(d_model, num_head, dropout=dropout)
@@ -146,11 +145,12 @@ class EncoderBlock(nn.Module):
         self.norm_2 = nn.LayerNorm(d_model)
         self.conv_num = conv_num
         self.dropout = dropout
+        self.__dict__.update({'pos_encoder':pos_encoder})
 
     def forward(self, x, mask, l, blks):
         total_layers = (self.conv_num + 1) * blks
         dropout = self.dropout
-        out = PosEncoder(x)
+        out = self.pos_encoder(x)
         for i, conv in enumerate(self.convs):
             res = out
             out = self.norm_C[i](out.transpose(1,2)).transpose(1,2)
@@ -208,7 +208,8 @@ class QANet(nn.Module):
 
         self.emb = InputEmbedding(word_mat, char_mat, d_model)
         self.num_head = num_head
-        self.emb_enc = EncoderBlock(conv_num=4, d_model=d_model, num_head=num_head, k=7, dropout=0.1)
+        pos_encoder = PositionalEncoding(dim=d_model, max_len=c_max_len)
+        self.emb_enc = EncoderBlock(conv_num=4, d_model=d_model, num_head=num_head, k=7, dropout=0.1, pos_encoder=pos_encoder)
         self.cq_att = ContextQueryAttention(d_model, dropout)
         self.cq_resizer = Initialized_Conv1d(d_model * 4, d_model)
         self.model_enc_blks = nn.ModuleList([EncoderBlock(conv_num=2, d_model=d_model, num_head=num_head, k=5, dropout=0.1) for _ in range(7)])
