@@ -13,7 +13,7 @@ def apply_mask(target, mask, eps=-1e30):
 
 from modules.pos_enc import PositionalEncoding
 
-from helpers import Activation
+from modules.helpers import Activation
 ###  CNNs
 
 from modules.conv import DepthwiseSeparableCNN, DepthwiseSeparableConv, Initialized_Conv1d, RegularConv
