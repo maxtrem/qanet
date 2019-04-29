@@ -85,7 +85,7 @@ class EncoderBlock(nn.Module):
     
     Each of these layers is placed inside a residual block.
     """
-    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0, shared_weight=False, shared_norm=False, pe=None):
+    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0, shared_weight=False, shared_norm=False):
         """
         # Arguments
             d_model:     (int) dimensionality of the model
@@ -98,10 +98,8 @@ class EncoderBlock(nn.Module):
         # handing over shape to init LayerNorm layer
         shape = d_model, seq_limit
         #self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit, droprate=0.0)
-        if pe == None:
-            self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit) ## TODO REMOVE Charing!!!
-        else:
-            self.__dict__.update({'positional_encoding_layer': pe})
+        self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit)
+
         shared_keys = {'conv_layers', 'mh_attn', 'ffnet'}
 
         if shared_weight:
@@ -187,9 +185,9 @@ class QANet(nn.Module):
         pe = PositionalEncoding(d_model, c_limit)
         self.positional_encoding_layer = pe
         # ToDo: EncoderBlock shared weights compability for loading weights
-        self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate, shared_norm=True, pe=pe)
+        self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate, shared_norm=False)
         self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, kernel_size=7, droprate=droprate, 
-                                                  shared_weight=self.context_encoder.main_layers, pe=pe)
+                                                  shared_weight=self.context_encoder.main_layers)
         
         self.context_query_attn_layer = ContextQueryAttention(d_model, droprate)
         
