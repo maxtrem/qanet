@@ -27,8 +27,8 @@ class Highway(nn.Module):
         """
         super().__init__()
         self.num_layers = num_layers
-        self.T = nn.ModuleList(Initialized_Conv1d(size, size, bias=True) for _ in range(num_layers))
-        self.H = nn.ModuleList(Initialized_Conv1d(size, size, bias=True) for _ in range(num_layers))
+        self.T = nn.ModuleList(Initialized_Conv1d(d_model, d_model, bias=True) for _ in range(num_layers))
+        self.H = nn.ModuleList(Initialized_Conv1d(d_model, d_model, bias=True) for _ in range(num_layers))
         self.activation_ = activation() if activation else None
         self.dropout     = nn.Dropout(p=droprate)
         
