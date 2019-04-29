@@ -75,7 +75,7 @@ class InputEmbedding(nn.Module):
         self.word_drop  = nn.Dropout(p=word_droprate)
         self.char_drop  = nn.Dropout(p=char_droprate)
         
-        self.highway    = Highway(2, d_model)
+        self.highway    = Highway(d_model, 2)
         
     def activation(self, x):
         return self.activation_(x) if self.activation_ else x
