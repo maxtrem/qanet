@@ -208,8 +208,8 @@ class QANet(nn.Module):
 
         self.emb = InputEmbedding(word_mat, char_mat, d_model)
         self.num_head = num_head
-        pos_encoder = PositionalEncoding(dim=d_model, max_len=c_max_len)
-        self.emb_enc = EncoderBlock(conv_num=4, d_model=d_model, num_head=num_head, k=7, dropout=0.1, pos_encoder=pos_encoder)
+        self.pos_encoder = PositionalEncoding(dim=d_model, max_len=c_max_len)
+        self.emb_enc = EncoderBlock(conv_num=4, d_model=d_model, num_head=num_head, k=7, dropout=0.1, pos_encoder=self.pos_encoder)
         self.cq_att = ContextQueryAttention(d_model, dropout)
         self.cq_resizer = Initialized_Conv1d(d_model * 4, d_model)
         self.model_enc_blks = nn.ModuleList([EncoderBlock(conv_num=2, d_model=d_model, num_head=num_head, k=5, dropout=0.1) for _ in range(7)])
