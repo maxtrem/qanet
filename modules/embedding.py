@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from modules.conv import Initialized_Conv1d
+from modules.conv import Initialized_Conv1d, RegularConv
 
 
 class Highway(nn.Module):
