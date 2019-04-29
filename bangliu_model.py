@@ -134,10 +134,10 @@ from modules.attn import SelfAttention
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, conv_num, d_model, num_head, k, dropout=0.1, pos_encoder=None):
+    def __init__(self, conv_num, d_model, heads, k, dropout=0.1, pos_encoder=None):
         super().__init__()
         self.convs = nn.ModuleList([DepthwiseSeparableConv(d_model, d_model, k) for _ in range(conv_num)])
-        self.self_att = SelfAttention(d_model, num_head, dropout=dropout)
+        self.self_att = SelfAttention(d_model, heads, dropout=dropout)
         self.FFN_1 = Initialized_Conv1d(d_model, d_model, relu=True, bias=True)
         self.FFN_2 = Initialized_Conv1d(d_model, d_model, bias=True)
         self.norm_C = nn.ModuleList([nn.LayerNorm(d_model) for _ in range(conv_num)])
@@ -203,16 +203,15 @@ class Pointer(nn.Module):
 class QANet(nn.Module):
     def __init__(self, word_mat, char_mat,
                  c_max_len, q_max_len, d_model, train_cemb=False, pad=0,
-                 dropout=0.1, num_head=1):  # !!! notice: set it to be a config parameter later.
+                 dropout=0.1, heads=1):  # !!! notice: set it to be a config parameter later.
         super().__init__()
-
         self.emb = InputEmbedding(word_mat, char_mat, d_model)
-        self.num_head = num_head
+        self.heads = heads
         self.pos_encoder = PositionalEncoding(dim=d_model, max_len=c_max_len)
-        self.emb_enc = EncoderBlock(conv_num=4, d_model=d_model, num_head=num_head, k=7, dropout=0.1, pos_encoder=self.pos_encoder)
+        self.emb_enc = EncoderBlock(conv_num=4, d_model=d_model, heads=heads, k=7, dropout=0.1, pos_encoder=self.pos_encoder)
         self.cq_att = ContextQueryAttention(d_model, dropout)
         self.cq_resizer = Initialized_Conv1d(d_model * 4, d_model)
-        self.model_enc_blks = nn.ModuleList([EncoderBlock(conv_num=2, d_model=d_model, num_head=num_head, k=5, dropout=0.1, pos_encoder=self.pos_encoder) for _ in range(7)])
+        self.model_enc_blks = nn.ModuleList([EncoderBlock(conv_num=2, d_model=d_model, heads=heads, k=5, dropout=0.1, pos_encoder=self.pos_encoder) for _ in range(7)])
         self.out = Pointer(d_model)
         self.PAD = pad
         self.Lc = c_max_len
@@ -302,9 +301,9 @@ if __name__ == "__main__":
                     1, cemb_vocab_size)
 
         # test whole QANet
-        num_head = 1
+        heads = 1
         qanet = QANet(wv_tensor, cv_tensor,
-                      c_max_len, q_max_len, d_model, train_cemb=False, num_head=num_head)
+                      c_max_len, q_max_len, d_model, train_cemb=False, heads=heads)
         p1, p2 = qanet(context_wids, context_cids,
                        question_wids, question_cids)
         print(p1.shape)

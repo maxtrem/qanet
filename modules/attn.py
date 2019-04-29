@@ -9,11 +9,11 @@ from modules.helpers import mask_logits, apply_mask
 # bangliu
 
 class SelfAttention(nn.Module):
-    def __init__(self, d_model, num_head, dropout):
+    def __init__(self, d_model, heads, droprate):
         super().__init__()
         self.d_model = d_model
-        self.num_head = num_head
-        self.dropout = dropout
+        self.num_head = heads
+        self.dropout = droprate
         self.mem_conv = Initialized_Conv1d(in_channels=d_model, out_channels=d_model*2, kernel_size=1, relu=False, bias=False)
         self.query_conv = Initialized_Conv1d(in_channels=d_model, out_channels=d_model, kernel_size=1, relu=False, bias=False)
 
@@ -96,7 +96,7 @@ class MultiHeadAttention(nn.Module):
     Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. 
     Attention is all you need. CoRR, abs/1706.03762, 2017a. URL http://arxiv.org/abs/1706.03762.
     """
-    def __init__(self, d_model, num_heads, dropout, proj_type=2):
+    def __init__(self, d_model, heads, droprate, proj_type=2):
         """
             Multi-Head-Attention
             # Arguments
@@ -106,15 +106,15 @@ class MultiHeadAttention(nn.Module):
         """
         super().__init__()
         self.d_model = d_model
-        self.h   = num_heads
-        self.d_h = d_model // num_heads
+        self.h   = heads
+        self.d_h = d_model // heads
         self.proj_type = proj_type
         if proj_type == 1:
             self.projections = nn.ModuleList([nn.Linear(d_model, d_model) for _ in range(4)])
         elif proj_type == 2:
             self.projections = nn.ModuleList([Initialized_Conv1d(in_channels=d_model, out_channels=d_model, kernel_size=1) for _ in range(4)])
         
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(droprate)
         
     def scaledDotProduct(self, Q, K, V, mask=None):
         logits = Q @ K.transpose(-2, -1)/math.sqrt(self.d_h)
