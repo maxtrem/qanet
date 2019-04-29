@@ -101,7 +101,7 @@ class EncoderBlock(nn.Module):
         if pe == None:
             self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit)
         else:
-            self.__dict__.update('positional_encoding_layer', pe)
+            self.__dict__.update({'positional_encoding_layer', pe})
         shared_keys = {'conv_layers', 'mh_attn', 'ffnet'}
 
         if shared_weight:
