@@ -15,10 +15,7 @@ def apply_mask(target, mask, eps=-1e30):
 #from modules.helpers import Activation
 ###  CNNs
 
-from modules.conv import DepthwiseSeparableCNN, DepthwiseSeparableConv, Initialized_Conv1d, RegularConv
-
-from modules.ffnet import FeedForward
-
+from modules.conv import RegularConv
 from modules.embedding import InputEmbedding
 
 
@@ -40,10 +37,10 @@ class PointerNet(nn.Module):
             in_features: int, sets number of input features
         """
         super().__init__()
-        self.feedforward = FeedForward(in_features=in_features, out_features=1, bias=False, use_cnn=False, activation=None, droprate=0.0)
+        self.projection_layer = RegularConv(in_channels=in_features, out_channels=1, bias=False)
         
     def forward(self, x, mask):
-        x = self.feedforward(x).squeeze()
+        x = self.projection_layer(x).squeeze()
         x = apply_mask(x, mask)
         return x
 
@@ -70,18 +67,13 @@ class QANet(nn.Module):
 
         self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=2)
 
-
-        # TODO !!: ReImplement EncoderBlock: merging, simplify / PosEnc / LayerNorm with transpose
-        # DepthwiseSeparableCNN Stack needs to contain ResidualBlocks for every single layer
         self.embedding_encoder     = EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate)
 
         
         self.context_query_attn_layer = ContextQueryAttention(d_model, droprate)
         
-        self.CQ_projection         = Initialized_Conv1d(d_model * 4, d_model)
-        
-        # TODO !!: ReImplement EncoderBlock: merging, simplify / PosEnc / LayerNorm with transpose
-        # DepthwiseSeparableCNN Stack needs to contain ResidualBlocks for every single layer
+        self.CQ_projection         = RegularConv(d_model * 4, d_model)
+
         stacked_encoder_blocks     = [EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=5, num_conv_layers=2, droprate=droprate) for _ in range(7)]
         self.stacked_enc_block     = nn.Sequential(*stacked_encoder_blocks)
         
