@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from modules.conv import Initialized_Conv1d
+from modules.conv import Initialized_Conv1d, RegularConv
 from modules.helpers import mask_logits, apply_mask
 
 import math
@@ -114,7 +114,7 @@ class MultiHeadAttn(nn.Module):
         if proj_type == 1:
             self.projections = nn.ModuleList([nn.Linear(d_model, d_model) for _ in range(4)])
         elif proj_type == 2:
-            self.projections = nn.ModuleList([Initialized_Conv1d(in_channels=d_model, out_channels=d_model, kernel_size=1) for _ in range(4)])
+            self.projections = nn.ModuleList([RegularConv(in_channels=d_model, out_channels=d_model, kernel_size=1) for _ in range(4)])
         
         self.dropout = nn.Dropout(droprate)
         
