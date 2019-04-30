@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from modules.helpers import Activation
+
 # bangliu
 
 class Initialized_Conv1d(nn.Module):
@@ -77,7 +79,7 @@ class DepthwiseSeparableCNN(nn.Module):
     Lukasz Kaiser, Aidan N Gomez, and Francois Chollet. 
     Depthwise separable convolutions for neural machine translation. arXiv preprint arXiv:1706.03059, 2017.
     """
-    def __init__(self, chin, chout, kernel_size=7, dim=1, activation=None, bias=True):
+    def __init__(self, chin, chout, kernel_size=7, dim=1, activation=nn.ReLU(), bias=True):
         """
         # Arguments
             chin:        (int) number of input channels
@@ -91,10 +93,7 @@ class DepthwiseSeparableCNN(nn.Module):
         self.dim = dim
         self.depthwise_cnn = CNN(chin, chin, kernel_size=kernel_size, padding=kernel_size // 2, groups=chin, bias=bias)
         self.pointwise_cnn = CNN(chin, chout, kernel_size=1, bias=bias)
-        self.activation_   = activation() if activation else None
-
-    def activation(self, x):
-        return self.activation_(x) if self.activation_ else x
+        self.activation  = Activation(activation)
 
     def forward(self, x):
         x = self.depthwise_cnn(x)
