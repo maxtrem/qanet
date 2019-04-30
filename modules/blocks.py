@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from modules.helpers import Activation
 from modules.conv import Initialized_Conv1d, DepthwiseSeparableCNN
-from modules.attn import MultiHeadAttnBL as MultiHeadAttn
+from modules.attn import MultiHeadAttn as MultiHeadAttn
 from modules.pos_enc import PositionalEncoding
 
 
@@ -77,6 +77,8 @@ class EncoderBlock(nn.Module):
         mh_attn = MultiHeadAttn(d_model=d_model, heads=8, droprate=droprate)#, proj_type=2)
         self.self_attn_block = ResidualBlock(mh_attn, d_model, droprate)
         l1 = Initialized_Conv1d(d_model, d_model, relu=True, bias=True)
+        #l1 = RegularConv(d_model, d_model, activation=nn.ReLU(), bias=True)
+
         #l2 = Initialized_Conv1d(d_model, d_model, relu=False, bias=True)
         #l12= nn.Sequential(l1, l2)
         self.feed_forward = ResidualBlock(l1, d_model, droprate)
