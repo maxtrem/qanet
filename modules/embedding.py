@@ -51,7 +51,7 @@ class InputEmbedding(nn.Module):
     """
     def __init__(self, word_emb_matrix, char_emb_matrix, d_model=128, 
                  kernel_size=(1,5), freeze_word_emb=True, freeze_ch_emb=False, char_cnn_type=2, 
-                 word_droprate=0.1, char_droprate=0.05):
+                 droprate=0.1)
         """
         # Arguments
             char_cnn_type:   (numpy.ndarray or torch.tensor) weight matrix containing the character embeddings
@@ -75,10 +75,10 @@ class InputEmbedding(nn.Module):
                                       dim=char_cnn_type, activation=nn.ReLU(), bias=True)
         self.proj_cnn   = RegularConv(self.word_D + d_model, d_model, 
                                       kernel_size=1, dim=1)
-        self.word_drop  = nn.Dropout(p=word_droprate)
-        self.char_drop  = nn.Dropout(p=char_droprate)
+        self.word_drop  = nn.Dropout(p=droprate)
+        self.char_drop  = nn.Dropout(p=droprate*0.5)
         
-        self.highway    = Highway(d_model, 2)
+        self.highway    = Highway(d_model, 2, droprate=droprate)
         
     def forward_chars(self, chars):
         # using 1D CNN

@@ -41,7 +41,7 @@ class QANet(nn.Module):
     Yu, Adams Wei, et al. "Qanet: Combining local convolution with global self-attention for reading comprehension." 
     arXiv preprint arXiv:1804.09541 (2018).
     """
-    def __init__(self, d_model, c_limit, q_limit, word_emb_matrix, char_emb_matrix, droprate=0.0):
+    def __init__(self, d_model, c_limit, q_limit, word_emb_matrix, char_emb_matrix, droprate=0.1):
         """
         # Arguments
             d_model:     (int) dimensionality of the model
@@ -54,7 +54,7 @@ class QANet(nn.Module):
         
         self.c_limit, self.q_limit = c_limit, q_limit
 
-        self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=2)
+        self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=2, droprate=droprate)
         self.embedding_encoder     = EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate)
 
         self.context_query_attn_layer = ContextQueryAttention(d_model, droprate)
