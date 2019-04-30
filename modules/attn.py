@@ -6,6 +6,8 @@ import torch.nn.functional as F
 from modules.conv import Initialized_Conv1d
 from modules.helpers import mask_logits, apply_mask
 
+import math
+
 # bangliu
 
 class MultiHeadAttnBL(nn.Module):
@@ -90,7 +92,7 @@ class MultiHeadAttnBL(nn.Module):
 
 # normal model
 
-class MultiHeadAttention(nn.Module):
+class MultiHeadAttn(nn.Module):
     """
     Implements Multi-Head self-attention as defined by:
     Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. 
