@@ -31,3 +31,9 @@ class Activation(nn.Module):
         
     def forward(self, x):
         return self.activation(x) if self.activation else x
+
+    def get_str(self):
+        return self.activation.__class__.__name__ if (self) else ''
+    
+    def __bool__(self):
+        return (not self.activation == None)

@@ -41,7 +41,7 @@ class DepthwiseSeparableConv(nn.Module):
 
 class RegularConv(nn.Module):
     def __init__(self, in_channels, out_channels,
-                 kernel_size, dim=1, activation=None, bias=False):
+                 kernel_size=1, dim=1, activation=None, bias=False):
         super().__init__()
 
         self.dim = dim
@@ -52,20 +52,13 @@ class RegularConv(nn.Module):
         else:
             padding = kernel_size // 2
 
-        self.conv = CNN(
-            in_channels, out_channels,
-            kernel_size, padding=0, 
-            bias=bias)
-        self.activation_ = activation() if activation else None
+        self.conv = CNN(in_channels, out_channels, kernel_size, padding=padding, bias=bias)
+        self.activation  = Activation(activation)
 
-        if self.activation_:
-            nonlinearity = self.activation_.__class__.__name__.lower()
-            nn.init.kaiming_normal_(self.conv.weight, nonlinearity=nonlinearity)
+        if self.activation:
+            nn.init.kaiming_normal_(self.conv.weight, nonlinearity=self.activation.get_str().lower())
         else:
             nn.init.xavier_uniform_(self.conv.weight)
-
-    def activation(self, x):
-        return self.activation_(x) if self.activation_ else x
 
     def forward(self, x):
         x = self.conv(x)
@@ -79,20 +72,20 @@ class DepthwiseSeparableCNN(nn.Module):
     Lukasz Kaiser, Aidan N Gomez, and Francois Chollet. 
     Depthwise separable convolutions for neural machine translation. arXiv preprint arXiv:1706.03059, 2017.
     """
-    def __init__(self, chin, chout, kernel_size=7, dim=1, activation=nn.ReLU(), bias=True):
+    def __init__(self, in_channels, out_channels, kernel_size=7, dim=1, activation=nn.ReLU(), bias=True):
         """
         # Arguments
-            chin:        (int) number of input channels
-            chout:       (int)  number of output channels
-            kernel_size: (int or tuple) size of the convolving kernel
-            dim:         (int:[1, 2, 3]) type of convolution i.e. dim=2 results in using nn.Conv2d
-            bias:        (bool) controlls usage of bias for convolutional layers
+            in_channels:   (int) number of input channels
+            out_channels:  (int)  number of output channels
+            kernel_size:   (int or tuple) size of the convolving kernel
+            dim:           (int:[1, 2, 3]) type of convolution i.e. dim=2 results in using nn.Conv2d
+            bias:          (bool) controlls usage of bias for convolutional layers
         """
         super().__init__()
         CNN =  getattr(nn, f'Conv{dim}d')
         self.dim = dim
-        self.depthwise_cnn = CNN(chin, chin, kernel_size=kernel_size, padding=kernel_size // 2, groups=chin, bias=bias)
-        self.pointwise_cnn = CNN(chin, chout, kernel_size=1, bias=bias)
+        self.depthwise_cnn = CNN(in_channels, in_channels, kernel_size=kernel_size, padding=kernel_size // 2, groups=chin, bias=bias)
+        self.pointwise_cnn = CNN(in_channels, out_channels, kernel_size=1, bias=bias)
         self.activation  = Activation(activation)
 
     def forward(self, x):
