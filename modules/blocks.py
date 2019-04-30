@@ -57,7 +57,7 @@ class EncoderBlock(nn.Module):
     
     Each of these layers is placed inside a residual block.
     """
-    def __init__(self, d_model=128, seq_limit=400, kernel_size=7, num_conv_layers=4, droprate=0.0, shared_weight=False, shared_norm=False):
+    def __init__(self, d_model=128, seq_limit=400, kernel_size=7, num_conv_layers=4, droprate=0.0):
         """
         # Arguments
             d_model:     (int) dimensionality of the model

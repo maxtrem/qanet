@@ -73,9 +73,8 @@ class QANet(nn.Module):
 
         # TODO !!: ReImplement EncoderBlock: merging, simplify / PosEnc / LayerNorm with transpose
         # DepthwiseSeparableCNN Stack needs to contain ResidualBlocks for every single layer
-        self.context_encoder       = EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate, shared_norm=False)
-        self.question_encoder      = EncoderBlock(d_model=d_model, seq_limit=q_limit, kernel_size=7, droprate=droprate, 
-                                                  shared_weight=self.context_encoder.main_layers)
+        self.embedding_encoder     = EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate)
+
         
         self.context_query_attn_layer = ContextQueryAttention(d_model, droprate)
         
