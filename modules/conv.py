@@ -29,19 +29,11 @@ class Initialized_Conv1d(nn.Module):
         else:
             return self.out(x)
 
-class DepthwiseSeparableConv(nn.Module):
-    def __init__(self, in_ch, out_ch, k, bias=True):
-        super().__init__()
-        self.depthwise_conv = nn.Conv1d(in_channels=in_ch, out_channels=in_ch, kernel_size=k, groups=in_ch, padding=k // 2, bias=False)
-        self.pointwise_conv = nn.Conv1d(in_channels=in_ch, out_channels=out_ch, kernel_size=1, padding=0, bias=bias)
-    def forward(self, x):
-        return F.relu(self.pointwise_conv(self.depthwise_conv(x)))
-
-# normal model
 
 class RegularConv(nn.Module):
     def __init__(self, in_channels, out_channels,
-                 kernel_size=1, dim=1, activation=None, bias=False):
+                 kernel_size=1, dim=1, activation=None, 
+                 bias=False):
         super().__init__()
 
         self.dim = dim
@@ -65,6 +57,13 @@ class RegularConv(nn.Module):
         x = self.activation(x)
         return x
 
+class DepthwiseSeparableConv(nn.Module):
+    def __init__(self, in_ch, out_ch, k, bias=True):
+        super().__init__()
+        self.depthwise_conv = nn.Conv1d(in_channels=in_ch, out_channels=in_ch, kernel_size=k, groups=in_ch, padding=k // 2, bias=False)
+        self.pointwise_conv = nn.Conv1d(in_channels=in_ch, out_channels=out_ch, kernel_size=1, padding=0, bias=bias)
+    def forward(self, x):
+        return F.relu(self.pointwise_conv(self.depthwise_conv(x)))
 
 class DepthwiseSeparableCNN(nn.Module):
     """

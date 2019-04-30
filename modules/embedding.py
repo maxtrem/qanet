@@ -6,6 +6,9 @@ import torch.nn.functional as F
 from modules.conv import Initialized_Conv1d, RegularConv
 from modules.ffnet import FeedForward
 
+from modules.helpers import Activation
+
+
 
 class Highway(nn.Module):
     """
@@ -13,7 +16,7 @@ class Highway(nn.Module):
     Rupesh Kumar Srivastava, Klaus Greff, and Ju ̈rgen Schmidhuber. 
     Highway networks. CoRR, abs/1505.00387, 2015. URL http://arxiv.org/abs/1505.00387.
     """
-    def __init__(self, d_model, num_layers=2, activation=None, droprate=0.0, use_cnn=True):
+    def __init__(self, d_model, num_layers=2, activation=None, droprate=0.1, use_cnn=True):
         
         """
         # Arguments
@@ -27,13 +30,10 @@ class Highway(nn.Module):
         """
         super().__init__()
         self.num_layers = num_layers
-        self.T = nn.ModuleList(Initialized_Conv1d(d_model, d_model, bias=True) for _ in range(num_layers))
-        self.H = nn.ModuleList(Initialized_Conv1d(d_model, d_model, bias=True) for _ in range(num_layers))
-        self.activation_ = activation() if activation else None
+        self.T = nn.ModuleList(RegularConv(d_model, d_model, bias=True) for _ in range(num_layers))
+        self.H = nn.ModuleList(RegularConv(d_model, d_model, bias=True) for _ in range(num_layers))
+        self.activation  = Activation(activation)
         self.dropout     = nn.Dropout(p=droprate)
-        
-    def activation(self, x):
-        return self.activation_(x) if self.activation_ else x
         
     def forward(self, x):
         for i in range(self.num_layers):
@@ -50,7 +50,9 @@ class InputEmbedding(nn.Module):
         are then concatenated with the token embeddings and projected again to `d_model` dim using another CNN.
         Finally these embeddings are feed into a two layer Highway network.
     """
-    def __init__(self, word_emb_matrix, char_emb_matrix, d_model=128, kernel_size=(1,5), freeze_word_emb=True, freeze_ch_emb=False, char_cnn_type=2, activation=nn.ReLU, word_droprate=0.1, char_droprate=0.05):
+    def __init__(self, word_emb_matrix, char_emb_matrix, d_model=128, 
+                 kernel_size=(1,5), freeze_word_emb=True, freeze_ch_emb=False, char_cnn_type=2, 
+                 word_droprate=0.1, char_droprate=0.05):
         """
         # Arguments
             char_cnn_type:   (numpy.ndarray or torch.tensor) weight matrix containing the character embeddings
@@ -69,16 +71,15 @@ class InputEmbedding(nn.Module):
         self.char_D     = self.char_embed.embedding_dim
         self.word_D     = self.word_embed.embedding_dim
         self.d_model      = d_model
-        self.activation_= activation() if activation else activation
-        self.char_cnn   = RegularConv(self.char_D , d_model, kernel_size, dim=char_cnn_type)
-        self.proj_cnn   = RegularConv(self.word_D + d_model , d_model, 1, dim=1)
+
+        self.char_cnn   = RegularConv(self.char_D , d_model, kernel_size=kernel_size, 
+                                      dim=char_cnn_type, activation=nn.ReLU(), bias=True)
+        self.proj_cnn   = RegularConv(self.word_D + d_model, d_model, 
+                                      kernel_size=1, dim=1)
         self.word_drop  = nn.Dropout(p=word_droprate)
         self.char_drop  = nn.Dropout(p=char_droprate)
         
         self.highway    = Highway(d_model, 2)
-        
-    def activation(self, x):
-        return self.activation_(x) if self.activation_ else x
         
     def forward_chars(self, chars):
         # using 1D CNN
@@ -90,15 +91,13 @@ class InputEmbedding(nn.Module):
             # collapse last dimension using max
             x = x.max(dim=-1)[0]
             # transpose to match word embedding shape (switch L and D/C), 
-            x = self.activation(x).view(N, TOK_LIM, self.d_model).transpose(1, 2)
-            return x
+            return x.view(N, TOK_LIM, self.d_model).transpose(1, 2)
         # using 2D CNN
         elif self.char_cnn.dim == 2:
             x = self.char_embed(chars)
             # permute from (N, TOK_LIM, CHAR_LIM, C) to (N, C, TOK_LIM, CHAR_LIM)
             # apply CNN, collapse last dimension using max
-            x = self.char_cnn(x.permute(0, 3, 1, 2)).max(dim=-1)[0]
-            return self.activation(x)
+            return self.char_cnn(x.permute(0, 3, 1, 2)).max(dim=-1)[0]
 
             
     def forward(self, token_ids, char_ids):
