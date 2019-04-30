@@ -51,7 +51,8 @@ class InputEmbedding(nn.Module):
     """
     def __init__(self, word_emb_matrix, char_emb_matrix, d_model=128, 
                  kernel_size=(1,5), freeze_word_emb=True, freeze_ch_emb=False, char_cnn_type=2, 
-                 droprate=0.1)
+                 droprate=0.1):
+
         """
         # Arguments
             char_cnn_type:   (numpy.ndarray or torch.tensor) weight matrix containing the character embeddings
