@@ -55,12 +55,9 @@ class QANet(nn.Module):
         self.c_limit, self.q_limit = c_limit, q_limit
 
         self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=2)
-
         self.embedding_encoder     = EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate)
 
-        
         self.context_query_attn_layer = ContextQueryAttention(d_model, droprate)
-        
         self.CQ_projection         = RegularConv(d_model * 4, d_model)
 
         stacked_encoder_blocks     = [EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=5, num_conv_layers=2, droprate=droprate) for _ in range(7)]
