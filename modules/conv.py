@@ -84,7 +84,7 @@ class DepthwiseSeparableCNN(nn.Module):
         super().__init__()
         CNN =  getattr(nn, f'Conv{dim}d')
         self.dim = dim
-        self.depthwise_cnn = CNN(in_channels, in_channels, kernel_size=kernel_size, padding=kernel_size // 2, groups=chin, bias=bias)
+        self.depthwise_cnn = CNN(in_channels, in_channels, kernel_size=kernel_size, padding=kernel_size // 2, groups=in_channels, bias=bias)
         self.pointwise_cnn = CNN(in_channels, out_channels, kernel_size=1, bias=bias)
         self.activation  = Activation(activation)
 
