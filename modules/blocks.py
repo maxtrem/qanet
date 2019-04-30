@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from modules.helpers import Activation
-from modules.conv import Initialized_Conv1d, DepthwiseSeparableCNN
+from modules.conv import Initialized_Conv1d, DepthwiseSeparableCNN, RegularConv
 from modules.attn import MultiHeadAttn as MultiHeadAttn
 from modules.pos_enc import PositionalEncoding
 
