@@ -114,7 +114,7 @@ class MultiHeadAttn(nn.Module):
         if proj_type == 1:
             self.projections = nn.ModuleList([nn.Linear(d_model, d_model) for _ in range(4)])
         elif proj_type == 2:
-            self.projections = nn.ModuleList([RegularConv(in_channels=d_model, out_channels=d_model, kernel_size=1) for _ in range(4)])
+            self.projections = nn.ModuleList([RegularConv(in_channels=d_model, out_channels=d_model, kernel_size=1, bias=False) for _ in range(3)])
         
         self.dropout = nn.Dropout(droprate)
         
@@ -173,4 +173,4 @@ class MultiHeadAttn(nn.Module):
             V = V.view(batch_size, self.h, self.d_h, -1).transpose(-2, -1)
             x = self.scaledDotProduct(K, Q, V, mask).transpose(-2, -1)
             x = x.reshape(batch_size, self.d_model, -1) # removed transpose(-2, -1) before reshape
-            return self.project(x, -1)
+            return x

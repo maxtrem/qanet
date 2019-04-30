@@ -13,7 +13,7 @@ from modules.helpers import mask_logits, apply_mask
 
 from modules.conv import RegularConv
 from modules.embedding import InputEmbedding
-from modules.blocks import EncoderBlock
+from modules.blocks import EncoderBlock, ModelEncoder
 
 
 class PointerNet(nn.Module):
@@ -55,21 +55,17 @@ class QANet(nn.Module):
         self.c_limit, self.q_limit = c_limit, q_limit
 
         self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=2, droprate=droprate)
-        self.embedding_encoder     = EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate)
+        self.embedding_encoder     = ModelEncoder(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate, num_blocks=1)
 
         self.context_query_attn_layer = ContextQueryAttention(d_model, droprate)
         self.CQ_projection         = RegularConv(d_model * 4, d_model)
 
-        stacked_encoder_blocks     = [EncoderBlock(d_model=d_model, seq_limit=c_limit, kernel_size=5, num_conv_layers=2, droprate=droprate) for _ in range(7)]
-        self.stacked_enc_block     = nn.Sequential(*stacked_encoder_blocks)
+        self.stacked_encoder       = ModelEncoder(d_model=d_model, seq_limit=c_limit, 
+                                                  kernel_size=5, num_conv_layers=2, 
+                                                  droprate=droprate, num_blocks=7)
         
         self.p_start         = PointerNet(2*d_model)
         self.p_end           = PointerNet(2*d_model)
-
-    def forward_stacked_enc_blocks(self, x, mask=None):
-        for block in self.stacked_enc_block:
-            x = block(x, mask=mask)
-        return x
         
     def forward(self, cwids, ccids, qwids, qcids):
         """
@@ -92,6 +88,7 @@ class QANet(nn.Module):
         mask_Q = (torch.ones_like(qwids) *
                  0 != qwids).float()
 
+
         C = self.input_embedding_layer(cwids, ccids)
         Q = self.input_embedding_layer(qwids, qcids)
 
@@ -101,9 +98,9 @@ class QANet(nn.Module):
         x = self.context_query_attn_layer(C, Q, mask_C, mask_Q)
         x = self.CQ_projection(x)
 
-        enc_1 = self.forward_stacked_enc_blocks(x, mask_C)
-        enc_2 = self.forward_stacked_enc_blocks(enc_1, mask_C)
-        enc_3 = self.forward_stacked_enc_blocks(enc_2, mask_C)
+        enc_1 = self.stacked_encoder(x, mask_C)
+        enc_2 = self.stacked_encoder(enc_1, mask_C)
+        enc_3 = self.stacked_encoder(enc_2, mask_C)
 
         logits_start = self.p_start(torch.cat((enc_1, enc_2), dim=1), mask_C)
         logits_end   = self.p_end(torch.cat((enc_1, enc_3), dim=1), mask_C)
