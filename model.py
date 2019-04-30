@@ -6,24 +6,13 @@ import math
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
-
-def apply_mask(target, mask, eps=-1e30):
-    return target * mask + (1 - mask) * (eps)
-
+from modules.helpers import mask_logits, apply_mask
 
 #from modules.helpers import Activation
 ###  CNNs
 
 from modules.conv import RegularConv
 from modules.embedding import InputEmbedding
-
-
-            
-    
-
-
-
 from modules.blocks import EncoderBlock
 
 
