@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from modules.helpers import Activation
 from modules.conv import Initialized_Conv1d, DepthwiseSeparableCNN
 from modules.attn import MultiHeadAttnBL as MultiHeadAttn
 from modules.pos_enc import PositionalEncoding
@@ -13,7 +14,7 @@ class ResidualBlock(nn.Module):
     ResidualBlock implements the function in form of `f(layernorm(x)) + x`. 
     Dropout and activation function can be set as well.
     """
-    def __init__(self, layer, shape, norm=None, droprate=0.0, activation=nn.ReLU, shared_weight=False, shared_norm=False):
+    def __init__(self, layer, d_model, droprate=0.0, activation=None):
         """
         # Arguments
             layer:      (instance of nn.Module with forward() implemented), layer represents function f
@@ -25,21 +26,11 @@ class ResidualBlock(nn.Module):
 
         super().__init__()
         
-        if shared_norm:
-            # using __dict__.update prevents the layer module from being registered in parameters
-            self.__dict__.update({'norm': shared_norm})
-        else:
-            self.norm  = nn.LayerNorm(shape)
-        if shared_weight:
-            # prevents the layer module from being registered in parameters
-            self.__dict__.update({'layer': layer})
-        else:
-            self.layer = layer
-        self.activation_ = activation() if activation else None
+
+        self.norm  = nn.LayerNorm(d_model)
+        self.layer = layer
+        self.activation  = Activation(activation)
         self.dropout     = nn.Dropout(p=droprate)
-        
-    def activation(self, x):
-        return self.activation_(x) if self.activation_ else x
         
     def forward(self, *args, **kwargs):
         if 'x' in kwargs:
@@ -49,11 +40,11 @@ class ResidualBlock(nn.Module):
             x = args[0]
             args = args[1:]
         residual_x = x
-        x = self.norm(x)
+        x = self.norm(x.transpose(1, 2)).transpose(1, 2)
         x = self.layer(x, *args, **kwargs)
-        x = self.activation(x) + residual_x
+        x = self.activation(x) 
         x = self.dropout(x)
-        return x
+        return x + residual_x
 
 class EncoderBlock(nn.Module):
     """
@@ -66,7 +57,7 @@ class EncoderBlock(nn.Module):
     
     Each of these layers is placed inside a residual block.
     """
-    def __init__(self, d_model=128, seq_limit=25, kernel_size=7, num_conv_layers=4, droprate=0.0, shared_weight=False, shared_norm=False):
+    def __init__(self, d_model=128, seq_limit=400, kernel_size=7, num_conv_layers=4, droprate=0.0, shared_weight=False, shared_norm=False):
         """
         # Arguments
             d_model:     (int) dimensionality of the model
@@ -76,49 +67,26 @@ class EncoderBlock(nn.Module):
             droprate:    (float) sets dropout rate for dropout
         """
         super().__init__()
-        # handing over shape to init LayerNorm layer
-        shape = d_model, seq_limit
-        #self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit, droprate=0.0)
-        self.positional_encoding_layer = PositionalEncoding(d_model, seq_limit)
 
-        shared_keys = {'conv_layers', 'mh_attn', 'ffnet'}
+        self.pos_encoder = PositionalEncoding(d_model, seq_limit)
 
-        if shared_weight:
-            missing = set.difference(shared_keys, set(shared_weight.keys()))
-            assert missing == set(), f'Missing modules {missing}'
-            self.main_layers = shared_weight
-            shared = True
-
-
-        else:
-            conv_layers = [DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size, activation=nn.ReLU) for _ in range(num_conv_layers)]
-            mh_attn = MultiHeadAttn(d_model=d_model, heads=8, droprate=droprate)#, proj_type=2)
-            ffnet = Initialized_Conv1d(d_model, d_model, relu=True, bias=True)
-
-            self.main_layers = {'conv_layers': conv_layers,
-                                'mh_attn': mh_attn,
-                                'ffnet': ffnet}
-            shared = False
-
-        if shared_norm:
-            self.shared_norm = nn.LayerNorm(shape)
-        else:
-            self.shared_norm = False
-        # ToDO: Try shared norm layer
-        stacked_CNN = [ResidualBlock(conv_layer, shape=shape, shared_weight=shared, shared_norm=self.shared_norm) for conv_layer in self.main_layers['conv_layers']]
+        conv_layers = [DepthwiseSeparableCNN(d_model, d_model, kernel_size=kernel_size) for _ in range(num_conv_layers)]
+        stacked_CNN = [ResidualBlock(cl, d_model, droprate) for cl in conv_layers]
         self.conv_blocks = nn.Sequential(*stacked_CNN)
         
-        self.self_attn_block = ResidualBlock(self.main_layers['mh_attn'], shape=shape, activation=None, droprate=droprate, ##RELU??
-                                             shared_weight=shared, shared_norm=self.shared_norm)
-        
-        self.feed_forward = ResidualBlock(self.main_layers['ffnet'], shape=shape, activation=None, droprate=droprate, 
-                                          shared_weight=shared, shared_norm=self.shared_norm)
+        mh_attn = MultiHeadAttn(d_model=d_model, heads=8, droprate=droprate)#, proj_type=2)
+        self.self_attn_block = ResidualBlock(mh_attn, d_model, droprate)
+        l1 = Initialized_Conv1d(d_model, d_model, relu=True, bias=True)
+        #l2 = Initialized_Conv1d(d_model, d_model, relu=False, bias=True)
+        #l12= nn.Sequential(l1, l2)
+        self.feed_forward = ResidualBlock(l1, d_model, droprate)
 
         
         
     def forward(self, x, mask=None):
-        x = self.positional_encoding_layer(x)
+        x = self.pos_encoder(x)
         x = self.conv_blocks(x)
         x = self.self_attn_block(x, mask=mask)
         x = self.feed_forward(x)
         return x
+    
