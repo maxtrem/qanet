@@ -117,8 +117,8 @@ class QANet(nn.Module):
         C = self.input_embedding_layer(cwids, ccids)
         Q = self.input_embedding_layer(qwids, qcids)
 
-        C = self.context_encoder(C, mask_C)
-        Q = self.question_encoder(Q, mask_Q)
+        C = self.embedding_encoder(C, mask_C)
+        Q = self.embedding_encoder(Q, mask_Q)
 
         x = self.context_query_attn_layer(C, Q, mask_C, mask_Q)
         x = self.CQ_projection(x)
