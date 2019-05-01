@@ -46,6 +46,7 @@ class ResidualBlock(nn.Module):
         drop_layer = bool(torch.rand(1) < droprate) and self.training
         return residual if drop_layer else F.dropout(inputs, p=droprate, training=self.training) + residual
 
+
 class ConvBlock(nn.Module):
     def __init__(self, d_model, kernel_size, droprate=0.1, num_layers=4):
         super().__init__()
