@@ -93,7 +93,7 @@ class QANet(nn.Module):
                  0 != qwids).float()
 
         if self.na_possible:
-            mask_extension = torch.ones(1, 1, dtype=torch.float).expand(mask_C.shape[0], -1)
+            mask_extension = torch.ones(1, 1, dtype=torch.float).expand(mask_C.shape[0], -1).to(device)
             mask_C = torch.cat((mask_C, mask_extension), dim=1)
 
         C = self.input_embedding_layer(cwids, ccids)
@@ -180,6 +180,7 @@ if __name__ == "__main__":
             qanet = QANet(d_model, c_max_len, q_max_len, wv_tensor, cv_tensor, droprate=0.1, na_possible=True).to(device)
             p1, p2 = qanet(context_wids, context_cids,
                        question_wids, question_cids)
+        print(context_wids.shape, context_cids.shape ,question_wids.shape, question_cids.shape)
         print(p1.shape)
         print(p2.shape)
 
