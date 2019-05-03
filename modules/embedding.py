@@ -51,7 +51,7 @@ class InputEmbedding(nn.Module):
     """
     def __init__(self, word_emb_matrix, char_emb_matrix, d_model=128, 
                  kernel_size=(1,5), freeze_word_emb=True, freeze_ch_emb=False, char_cnn_type=2, 
-                 droprate=0.1):
+                 droprate=0.1, na_possible=False):
 
         """
         # Arguments
@@ -70,6 +70,11 @@ class InputEmbedding(nn.Module):
         self.word_embed = nn.Embedding.from_pretrained(torch.tensor(word_emb_matrix), freeze=freeze_word_emb)
         self.char_D     = self.char_embed.embedding_dim
         self.word_D     = self.word_embed.embedding_dim
+        self.na_possible = na_possible
+        if na_possible:
+            self.char_NA    = nn.Parameter(torch.rand(1, 1, 1, self.char_D)) # check also (1, 1, 16, self.char_D)
+            self.word_NA    = nn.Parameter(torch.rand(1, 1, self.word_D))
+
         self.d_model      = d_model
 
         self.char_cnn   = RegularConv(self.char_D , d_model, kernel_size=kernel_size, 
@@ -82,10 +87,14 @@ class InputEmbedding(nn.Module):
         self.highway    = Highway(d_model, 2, droprate=droprate)
         
     def forward_chars(self, chars):
+
+        x = self.char_embed(chars)
+        N, TOK_LIM, CHAR_LIM, EMBED_DIM = x.shape
+
+        if self.na_possible:
+            x = torch.cat((x, self.char_NA.expand(N, 1, CHAR_LIM, -1)), dim=1)
         # using 1D CNN
         if self.char_cnn.dim == 1:
-            x = self.char_embed(chars)
-            N, TOK_LIM, CHAR_LIM, EMBED_DIM = x.shape
             # CNN Input: (N, C, L) - merge Batch and Sequence / Time dimension, transpose input (N, L, C) to (N, C, L)
             x = self.char_cnn(x.view(N*TOK_LIM, CHAR_LIM, EMBED_DIM).transpose(1, 2))
             # collapse last dimension using max
@@ -94,10 +103,15 @@ class InputEmbedding(nn.Module):
             return x.view(N, TOK_LIM, self.d_model).transpose(1, 2)
         # using 2D CNN
         elif self.char_cnn.dim == 2:
-            x = self.char_embed(chars)
             # permute from (N, TOK_LIM, CHAR_LIM, C) to (N, C, TOK_LIM, CHAR_LIM)
             # apply CNN, collapse last dimension using max
             return self.char_cnn(x.permute(0, 3, 1, 2)).max(dim=-1)[0]
+
+    def forward_words(self, x):
+        x = self.word_embed(x)
+        if self.na_possible:
+            x = torch.cat((x, self.word_NA.expand(x.shape[0], -1, -1)), dim=1)
+        return x
 
             
     def forward(self, token_ids, char_ids):
@@ -110,7 +124,35 @@ class InputEmbedding(nn.Module):
         """
         embedded_chars = self.char_drop(self.forward_chars(char_ids))
         # forward word embedding, transpose L and D 
-        embedded_words = self.word_drop(self.word_embed(token_ids).transpose(1, 2))
+        embedded_words = self.word_drop(self.forward_words(token_ids).transpose(1, 2))
         # concat char and word embeddings and forward projection cnn
         x = self.proj_cnn(torch.cat((embedded_words, embedded_chars), dim=1))
         return self.highway(x)
+
+if __name__ == "__main__":
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    wemb_vocab_size = 5000
+    wemb_dim = 300
+    cemb_vocab_size = 94
+    cemb_dim = 64
+    d_model = 32
+    batch_size = 32
+    q_max_len = 50
+    c_max_len = 400
+    char_dim = 16
+
+    # fake embedding
+    wv_tensor = torch.rand(wemb_vocab_size, wemb_dim)
+    cv_tensor = torch.rand(cemb_vocab_size, cemb_dim)
+
+    # fake input
+    question_lengths = torch.LongTensor(batch_size).random_(1, q_max_len)
+    question_wids = torch.zeros(batch_size, q_max_len).long()
+    question_cids = torch.zeros(batch_size, q_max_len, char_dim).long()
+    context_lengths = torch.LongTensor(batch_size).random_(1, c_max_len)
+    context_wids = torch.zeros(batch_size, c_max_len).long()
+    context_cids = torch.zeros(batch_size, c_max_len, char_dim).long()
+
+    embedding = InputEmbedding(wv_tensor, cv_tensor, d_model=d_model, na_possible=False)
+    out = embedding(question_wids, question_cids)
+    print('Output:', out.shape)

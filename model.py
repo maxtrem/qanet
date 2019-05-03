@@ -41,7 +41,7 @@ class QANet(nn.Module):
     Yu, Adams Wei, et al. "Qanet: Combining local convolution with global self-attention for reading comprehension." 
     arXiv preprint arXiv:1804.09541 (2018).
     """
-    def __init__(self, d_model, c_limit, q_limit, word_emb_matrix, char_emb_matrix, droprate=0.1):
+    def __init__(self, d_model, c_limit, q_limit, word_emb_matrix, char_emb_matrix, droprate=0.1, na_possible=False):
         """
         # Arguments
             d_model:     (int) dimensionality of the model
@@ -52,9 +52,13 @@ class QANet(nn.Module):
         """
         super().__init__()
         
+        if na_possible:
+            c_limit += 1
         self.c_limit, self.q_limit = c_limit, q_limit
+        self.na_possible = na_possible
 
-        self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=2, droprate=droprate)
+        self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=2, 
+                                                    droprate=droprate, na_possible=na_possible)
         self.embedding_encoder     = ModelEncoder(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate, num_blocks=1)
 
         self.context_query_attn_layer = ContextQueryAttention(d_model, droprate)
@@ -88,9 +92,12 @@ class QANet(nn.Module):
         mask_Q = (torch.ones_like(qwids) *
                  0 != qwids).float()
 
+        if self.na_possible:
+            mask_extension = torch.ones(1, 1, dtype=torch.float).expand(mask_C.shape[0], -1)
+            mask_C = torch.cat((mask_C, mask_extension), dim=1)
 
         C = self.input_embedding_layer(cwids, ccids)
-        Q = self.input_embedding_layer(qwids, qcids)
+        Q = self.input_embedding_layer(qwids, qcids)[:, :, :self.q_limit]
 
         C = self.embedding_encoder(C, mask_C)
         Q = self.embedding_encoder(Q, mask_Q)
@@ -170,7 +177,7 @@ if __name__ == "__main__":
         #              c_max_len, q_max_len, d_model)
         #print(d_model, c_max_len, q_max_len, wv_tensor.shape, cv_tensor.shape)
         with torch.no_grad():
-            qanet = QANet(d_model, c_max_len, q_max_len, wv_tensor, cv_tensor, droprate=0.1).to(device)
+            qanet = QANet(d_model, c_max_len, q_max_len, wv_tensor, cv_tensor, droprate=0.1, na_possible=True).to(device)
             p1, p2 = qanet(context_wids, context_cids,
                        question_wids, question_cids)
         print(p1.shape)
