@@ -4,6 +4,7 @@ import ujson as json
 from collections import Counter
 import numpy as np
 from codecs import open
+import random
 
 '''
 The content of this file is mostly copied from https://github.com/HKUST-KnowComp/R-Net/blob/master/prepro.py
@@ -11,6 +12,10 @@ The content of this file is mostly copied from https://github.com/HKUST-KnowComp
 
 nlp = spacy.blank("en")
 
+def rand_sample_avg_vec(d, sample_size=1000):
+    keys = random.sample(list(d), num_samples)
+    values = [d[k] for k in keys]
+    return sum(values) / len(values)
 
 def word_tokenize(sent):
     doc = nlp(sent)
@@ -31,6 +36,18 @@ def convert_idx(text, tokens):
 
 
 def process_file(filename, data_type, word_counter, char_counter):
+    """
+    # Arguments
+        filename       (string path) path to json file containing the data
+        data_type      (string) string identifier for the partition e.g. 'train', 'dev'
+        word_counter   (collections.Counter) counter used for word embedding creation
+        char_counter   (collections.Counter) counter used for character embedding creation
+    # Returns
+        examples       (list, containing dicts) every dict contains question and context in 
+                                                tokens and characters as well as target spans
+        eval_examples  (list, containing dicts) 
+    """
+
     print("Generating {} examples...".format(data_type))
     examples = []
     eval_examples = {}
@@ -72,6 +89,8 @@ def process_file(filename, data_type, word_counter, char_counter):
                         y1, y2 = answer_span[0], answer_span[-1]
                         y1s.append(y1)
                         y2s.append(y2)
+                    if y1s == y2s == []:
+                        y1s, y2s = [1000], [1000]
                     example = {"context_tokens": context_tokens, "context_chars": context_chars,
                                "ques_tokens": ques_tokens,
                                "ques_chars": ques_chars, "y1s": y1s, "y2s": y2s, "id": total}
@@ -106,12 +125,15 @@ def get_embedding(counter, data_type, limit=-1, emb_file=None, vec_size=None):
             len(filtered_elements)))
 
     NULL = "--NULL--"
-    OOV = "--OOV--"
-    token2idx_dict = {token: idx for idx, token in enumerate(embedding_dict.keys(), 2)}
+    OOV  = "--OOV--"
+    NA   = "--NA--"
+    num_extra_tokens = 2
+    token2idx_dict = {token: idx for idx, token in enumerate(embedding_dict.keys(), num_extra_tokens)}
     token2idx_dict[NULL] = 0
     token2idx_dict[OOV] = 1
+
     embedding_dict[NULL] = [0. for _ in range(vec_size)]
-    embedding_dict[OOV] = [0. for _ in range(vec_size)]
+    embedding_dict[OOV] = rand_sample_avg_vec(embedding_dict, sample_size=10000)
     idx2emb_dict = {idx: embedding_dict[token]
                     for token, idx in token2idx_dict.items()}
     emb_mat = [idx2emb_dict[idx] for idx in range(len(idx2emb_dict))]
@@ -297,6 +319,4 @@ def prepro(config):
     save(config.char2idx_file, char2idx_dict, message="char dictionary")
     save(config.dev_meta, dev_meta, message="dev meta")
     # save(config.test_meta, test_meta, message="test meta")
-
-
 
