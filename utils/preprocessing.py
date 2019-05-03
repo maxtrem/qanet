@@ -13,9 +13,9 @@ The content of this file is mostly copied from https://github.com/HKUST-KnowComp
 nlp = spacy.blank("en")
 
 def rand_sample_avg_vec(d, sample_size=1000):
-    keys = random.sample(list(d), num_samples)
+    keys = random.sample(list(d), sample_size)
     values = [d[k] for k in keys]
-    return sum(values) / len(values)
+    return np.array(values).sum(0) / len(values)
 
 def word_tokenize(sent):
     doc = nlp(sent)
@@ -133,7 +133,7 @@ def get_embedding(counter, data_type, limit=-1, emb_file=None, vec_size=None):
     token2idx_dict[OOV] = 1
 
     embedding_dict[NULL] = [0. for _ in range(vec_size)]
-    embedding_dict[OOV] = rand_sample_avg_vec(embedding_dict, sample_size=10000)
+    embedding_dict[OOV]  = [0. for _ in range(vec_size)]
     idx2emb_dict = {idx: embedding_dict[token]
                     for token, idx in token2idx_dict.items()}
     emb_mat = [idx2emb_dict[idx] for idx in range(len(idx2emb_dict))]
