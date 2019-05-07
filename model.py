@@ -20,17 +20,24 @@ class PointerNet(nn.Module):
     """Implements a Pointer Network as defined by:
     Shuohang Wang and Jing Jiang. Machine comprehension using match-lstm and answer pointer. 
     CoRR, abs/1608.07905, 2016. URL http://arxiv.org/abs/1608.07905."""
-    def __init__(self, in_features):
+    def __init__(self, in_features, na_possible=False, c_limit=None):
         """
         # Arguments
             in_features: int, sets number of input features
         """
         super().__init__()
         self.projection_layer = RegularConv(in_channels=in_features, out_channels=1, bias=False)
+        self.na_possible = na_possible
+        if na_possible:
+            assert isinstance(c_limit, int), 'c_limit needs to be set for answer verification'
+            self.verification_layer = RegularConv(in_channels=c_limit, out_channels=1, bias=False)
         
     def forward(self, x, mask):
-        x = self.projection_layer(x).squeeze()
-        x = apply_mask(x, mask)
+        unmasked = self.projection_layer(x)
+        x = apply_mask(unmasked.squeeze(), mask)
+        if self.na_possible:
+            na = self.verification_layer(unmasked.transpose(1, 2)).view(-1, 1)
+            x = torch.cat((x, na), dim=-1)
         return x
 
 from modules.cqattn import ContextQueryAttention
@@ -41,7 +48,7 @@ class QANet(nn.Module):
     Yu, Adams Wei, et al. "Qanet: Combining local convolution with global self-attention for reading comprehension." 
     arXiv preprint arXiv:1804.09541 (2018).
     """
-    def __init__(self, d_model, c_limit, q_limit, word_emb_matrix, char_emb_matrix, droprate=0.1):
+    def __init__(self, d_model, c_limit, q_limit, word_emb_matrix, char_emb_matrix, droprate=0.1, na_possible=False):
         """
         # Arguments
             d_model:     (int) dimensionality of the model
@@ -52,7 +59,8 @@ class QANet(nn.Module):
         """
         super().__init__()
         
-        self.c_limit, self.q_limit = c_limit, q_limit
+        self.c_limit, self.q_limit = c_limit+na_possible, q_limit+na_possible
+        self.na_possible = na_possible
 
         self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=2, droprate=droprate)
         self.embedding_encoder     = ModelEncoder(d_model=d_model, seq_limit=c_limit, kernel_size=7, droprate=droprate, num_blocks=1)
@@ -64,8 +72,8 @@ class QANet(nn.Module):
                                                   kernel_size=5, num_conv_layers=2, 
                                                   droprate=droprate, num_blocks=7)
         
-        self.p_start         = PointerNet(2*d_model)
-        self.p_end           = PointerNet(2*d_model)
+        self.p_start         = PointerNet(2*d_model, na_possible, c_limit)
+        self.p_end           = PointerNet(2*d_model, na_possible, c_limit)
         
     def forward(self, cwids, ccids, qwids, qcids):
         """
@@ -170,7 +178,7 @@ if __name__ == "__main__":
         #              c_max_len, q_max_len, d_model)
         #print(d_model, c_max_len, q_max_len, wv_tensor.shape, cv_tensor.shape)
         with torch.no_grad():
-            qanet = QANet(d_model, c_max_len, q_max_len, wv_tensor, cv_tensor, droprate=0.1).to(device)
+            qanet = QANet(d_model, c_max_len, q_max_len, wv_tensor, cv_tensor, droprate=0.1, na_possible=True).to(device)
             p1, p2 = qanet(context_wids, context_cids,
                        question_wids, question_cids)
         print(p1.shape)
