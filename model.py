@@ -130,13 +130,13 @@ if __name__ == "__main__":
         # device and data sizes
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         wemb_vocab_size = 5000
-        wemb_dim = 300
+        wemb_dim = 100
         cemb_vocab_size = 94
         cemb_dim = 64
         d_model = 32
         batch_size = 32
-        q_max_len = 50
-        c_max_len = 400
+        q_max_len = 10
+        c_max_len = 50
         char_dim = 16
 
         # fake embedding
