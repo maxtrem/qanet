@@ -30,14 +30,20 @@ class PointerNet(nn.Module):
         self.na_possible = na_possible
         if na_possible:
             assert isinstance(c_limit, int), 'c_limit needs to be set for answer verification'
-            self.verification_layer = RegularConv(in_channels=c_limit, out_channels=1, bias=False)
+            self.flat_length = in_features * c_limit
+
+            self.verification_layer = RegularConv(in_channels=self.flat_length, out_channels=1, bias=False)
         
     def forward(self, x, mask):
+        """
+            x.shape:    (batch, dim, length)
+            mask.shape: (batch, length)
+        """
         unmasked = self.projection_layer(x)
-        x = apply_mask(unmasked.squeeze(), mask)
+        masked   = apply_mask(unmasked.squeeze(), mask)
         if self.na_possible:
-            na = self.verification_layer(unmasked.transpose(1, 2)).view(-1, 1)
-            x = torch.cat((x, na), dim=-1)
+            na = self.verification_layer(x.view(-1, self.flat_length, 1)).view(-1, 1)
+            x = torch.cat((masked, na), dim=-1)
         return x
 
 from modules.cqattn import ContextQueryAttention
