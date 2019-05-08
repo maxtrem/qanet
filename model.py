@@ -20,29 +20,30 @@ class PointerNet(nn.Module):
     """Implements a Pointer Network as defined by:
     Shuohang Wang and Jing Jiang. Machine comprehension using match-lstm and answer pointer. 
     CoRR, abs/1608.07905, 2016. URL http://arxiv.org/abs/1608.07905."""
-    def __init__(self, in_features, na_possible=False, c_limit=None):
+    def __init__(self, d_model, na_possible=False, c_limit=None):
         """
         # Arguments
             in_features: int, sets number of input features
         """
         super().__init__()
-        self.projection_layer = RegularConv(in_channels=in_features, out_channels=1, bias=False)
+        self.projection_layer = RegularConv(in_channels=2*d_model, out_channels=1, bias=False)
         self.na_possible = na_possible
         if na_possible:
             assert isinstance(c_limit, int), 'c_limit needs to be set for answer verification'
-            self.flat_length = in_features * c_limit
+            self.flat_length = d_model * c_limit
 
-            self.verification_layer = RegularConv(in_channels=self.flat_length, out_channels=1, bias=False)
+            self.verification_layer = nn.Bilinear(self.flat_length, self.flat_length, 1)
         
-    def forward(self, x, mask):
+    def forward(self, x1, x2, mask):
         """
-            x.shape:    (batch, dim, length)
+            x.shape:    (batch, dim*2, length)
             mask.shape: (batch, length)
         """
+        x = torch.cat((x1, x2), dim=1)
         unmasked = self.projection_layer(x)
         masked   = apply_mask(unmasked.squeeze(), mask)
         if self.na_possible:
-            na = self.verification_layer(x.view(-1, self.flat_length, 1)).view(-1, 1)
+            na = self.verification_layer(x1.view(-1, self.flat_length), x2.view(-1, self.flat_length))
             x = torch.cat((masked, na), dim=-1)
         return x
 
@@ -78,8 +79,8 @@ class QANet(nn.Module):
                                                   kernel_size=5, num_conv_layers=2, 
                                                   droprate=droprate, num_blocks=7)
         
-        self.p_start         = PointerNet(2*d_model, na_possible, c_limit)
-        self.p_end           = PointerNet(2*d_model, na_possible, c_limit)
+        self.p_start         = PointerNet(d_model, na_possible, c_limit)
+        self.p_end           = PointerNet(d_model, na_possible, c_limit)
         
     def forward(self, cwids, ccids, qwids, qcids):
         """
@@ -116,8 +117,8 @@ class QANet(nn.Module):
         enc_2 = self.stacked_encoder(enc_1, mask_C)
         enc_3 = self.stacked_encoder(enc_2, mask_C)
 
-        logits_start = self.p_start(torch.cat((enc_1, enc_2), dim=1), mask_C)
-        logits_end   = self.p_end(torch.cat((enc_1, enc_3), dim=1), mask_C)
+        logits_start = self.p_start(enc_1, enc_2, mask=mask_C)
+        logits_end   = self.p_end(enc_1, enc_3, mask=mask_C)
         
         return logits_start.view(-1, self.c_limit), logits_end.view(-1, self.c_limit)
     
