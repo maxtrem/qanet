@@ -70,7 +70,7 @@ class QANet(nn.Module):
                                                   kernel_size=5, num_conv_layers=2, 
                                                   droprate=droprate, num_blocks=7)
 
-        self.na_proj_1 = RegularConv(d_model * 4, 1)
+        self.na_proj_1 = RegularConv(d_model, 1)
         self.na_proj_2 = RegularConv(c_limit, 1)
         
         self.p_start         = PointerNet(d_model, na_possible, c_limit)
@@ -105,10 +105,11 @@ class QANet(nn.Module):
         Q = self.embedding_encoder(Q, mask_Q)
 
         x = self.context_query_attn_layer(C, Q, mask_C, mask_Q)
-        na = self.na_proj_1(x)
-        na = self.na_proj_2(na.transpose(1, 2)).view(-1, 1)
+        
 
         x = self.CQ_projection(x)
+        na = self.na_proj_1(F.relu(x))
+        na = self.na_proj_2(na.transpose(1, 2)).view(-1, 1)
 
         enc_1 = self.stacked_encoder(x, mask_C)
         enc_2 = self.stacked_encoder(enc_1, mask_C)
