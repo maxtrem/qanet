@@ -32,7 +32,7 @@ class PointerNet(nn.Module):
             assert isinstance(c_limit, int), 'c_limit needs to be set for answer verification'
             self.flat_length = d_model * c_limit
 
-            self.verification_layer = RegularConv(in_channels=self.flat_length, out_channels=1, bias=False)
+            self.verification_layer = nn.Bilinear(self.flat_length, self.flat_length, 1)
         
     def forward(self, x1, x2, mask):
         """
@@ -43,7 +43,7 @@ class PointerNet(nn.Module):
         unmasked = self.projection_layer(x)
         masked   = apply_mask(unmasked.squeeze(), mask)
         if self.na_possible:
-            na = self.verification_layer((x1 * x2).view(-1, self.flat_length, 1)).view(-1, 1)
+            na = self.verification_layer(x1.view(-1, self.flat_length), x2.view(-1, self.flat_length))
             x = torch.cat((masked, na), dim=-1)
         return x
 
