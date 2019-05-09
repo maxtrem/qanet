@@ -27,12 +27,6 @@ class PointerNet(nn.Module):
         """
         super().__init__()
         self.projection_layer = RegularConv(in_channels=2*d_model, out_channels=1, bias=False)
-        self.na_possible = na_possible
-        if na_possible:
-            assert isinstance(c_limit, int), 'c_limit needs to be set for answer verification'
-            self.flat_length = d_model * c_limit
-
-            self.verification_layer = RegularConv(in_channels=self.flat_length, out_channels=1, bias=False)
         
     def forward(self, x1, x2, mask):
         """
@@ -40,11 +34,8 @@ class PointerNet(nn.Module):
             mask.shape: (batch, length)
         """
         x = torch.cat((x1, x2), dim=1)
-        unmasked = self.projection_layer(x)
-        masked   = apply_mask(unmasked.squeeze(), mask)
-        if self.na_possible:
-            na = self.verification_layer((x1 * x2).view(-1, self.flat_length, 1)).view(-1, 1)
-            x = torch.cat((masked, na), dim=-1)
+        x = self.projection_layer(x)
+        x   = apply_mask(x.squeeze(), mask)
         return x
 
 from modules.cqattn import ContextQueryAttention
@@ -78,6 +69,9 @@ class QANet(nn.Module):
         self.stacked_encoder       = ModelEncoder(d_model=d_model, seq_limit=c_limit, 
                                                   kernel_size=5, num_conv_layers=2, 
                                                   droprate=droprate, num_blocks=7)
+
+        self.na_proj_1 = RegularConv(d_model * 4, 1)
+        self.na_proj_2 = RegularConv(c_limit, 1)
         
         self.p_start         = PointerNet(d_model, na_possible, c_limit)
         self.p_end           = PointerNet(d_model, na_possible, c_limit)
@@ -111,6 +105,9 @@ class QANet(nn.Module):
         Q = self.embedding_encoder(Q, mask_Q)
 
         x = self.context_query_attn_layer(C, Q, mask_C, mask_Q)
+        na = self.na_proj_1(x)
+        na = self.na_proj_2(na.transpose(1, 2)).view(-1, 1)
+
         x = self.CQ_projection(x)
 
         enc_1 = self.stacked_encoder(x, mask_C)
@@ -120,6 +117,9 @@ class QANet(nn.Module):
         logits_start = self.p_start(enc_1, enc_2, mask=mask_C)
         logits_end   = self.p_end(enc_1, enc_3, mask=mask_C)
         
+        logits_start = torch.cat((logits_start, na), dim=-1)
+        logits_end   = torch.cat((logits_end, na), dim=-1)
+
         return logits_start.view(-1, self.c_limit), logits_end.view(-1, self.c_limit)
     
     
