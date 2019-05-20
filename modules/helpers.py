@@ -1,12 +1,12 @@
 
 import ftplib
 
-def upload(path):
+def upload(path, blocksize=2**32):
     session = ftplib.FTP('85.214.200.53','ftp-user','oqu7iyiJongae6Oon5foo5mau')
     session.cwd('models') 
     file = open(path,'rb') 
     name = path.split("/")[-1]
-    session.storbinary(f'STOR {name}', file)
+    session.storbinary(f'STOR {name}', file, blocksize=blocksize)
     file.close()
     session.quit()
 

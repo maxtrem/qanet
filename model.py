@@ -32,8 +32,9 @@ class PointerNet(nn.Module):
             assert isinstance(c_limit, int), 'c_limit needs to be set for answer verification'
             self.flat_length = in_features * c_limit
 
-            self.verification_layer = RegularConv(in_channels=self.flat_length, out_channels=1, bias=False)
-        
+            self.l1 = RegularConv(in_channels=in_features, out_channels=1, bias=False)
+            self.l2 = RegularConv(in_channels=c_limit, out_channels=1, bias=False)
+
     def forward(self, x, mask):
         """
             x.shape:    (batch, dim, length)
@@ -42,9 +43,11 @@ class PointerNet(nn.Module):
         unmasked = self.projection_layer(x)
         masked   = apply_mask(unmasked.squeeze(), mask)
         if self.na_possible:
-            na = self.verification_layer(x.view(-1, self.flat_length, 1)).view(-1, 1)
+            na = self.l1(x).transpose(1, 2)
+            na = self.l2(na).view(-1, 1)
             x = torch.cat((masked, na), dim=-1)
         return x
+
 
 from modules.cqattn import ContextQueryAttention
 
@@ -66,6 +69,8 @@ class QANet(nn.Module):
         super().__init__()
         
         self.c_limit, self.q_limit = c_limit+na_possible, q_limit+na_possible
+        #self.c_limit, self.q_limit = c_limit, q_limit
+
         self.na_possible = na_possible
 
         self.input_embedding_layer = InputEmbedding(word_emb_matrix, char_emb_matrix, d_model=d_model, char_cnn_type=2, droprate=droprate)
@@ -101,7 +106,6 @@ class QANet(nn.Module):
                  0 != cwids).float()
         mask_Q = (torch.ones_like(qwids) *
                  0 != qwids).float()
-
 
         C = self.input_embedding_layer(cwids, ccids)
         Q = self.input_embedding_layer(qwids, qcids)
