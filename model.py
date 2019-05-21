@@ -42,8 +42,10 @@ class PointerNet(nn.Module):
         """
         unmasked = self.projection_layer(x)
         masked   = apply_mask(unmasked.squeeze(), mask)
+        candidates_idx = masked.argmax(dim=1)
+        candidates = masked[candidates]
         if self.na_possible:
-            na = self.l1(x).transpose(1, 2)
+            na = F.relu(self.l1(x).transpose(1, 2))
             na = self.l2(na).view(-1, 1)
             x = torch.cat((masked, na), dim=-1)
         return x
