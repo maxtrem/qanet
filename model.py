@@ -41,7 +41,7 @@ class QANet(nn.Module):
     Yu, Adams Wei, et al. "Qanet: Combining local convolution with global self-attention for reading comprehension." 
     arXiv preprint arXiv:1804.09541 (2018).
     """
-    def __init__(self, d_model, c_limit, q_limit, word_emb_matrix, char_emb_matrix, droprate=0.1):
+    def __init__(self, d_model, c_limit, q_limit, word_emb_matrix, char_emb_matrix, droprate=0.1, na_possible=False):
         """
         # Arguments
             d_model:     (int) dimensionality of the model
@@ -51,6 +51,8 @@ class QANet(nn.Module):
             char_emb_matrix: (numpy.ndarray) embedding weights for characters
         """
         super().__init__()
+
+        self.na_possible = na_possible
         
         self.c_limit, self.q_limit = c_limit, q_limit
 
@@ -105,11 +107,13 @@ class QANet(nn.Module):
         logits_start = self.p_start(torch.cat((enc_1, enc_2), dim=1), mask_C)
         logits_end   = self.p_end(torch.cat((enc_1, enc_3), dim=1), mask_C)
         
-        batch_size   = logits_start.shape[0]
-        dummy_na     = torch.tensor([[float('-inf')]], device=device).expand(batch_size, 1)
 
-        logits_start = torch.cat((logits_start, dummy_na), dim=1)
-        logits_end   = torch.cat((logits_end  , dummy_na), dim=1)
+
+        if self.na_possible:
+            batch_size   = logits_start.shape[0]
+            dummy_na     = torch.tensor([[float('-inf')]], device=device).expand(batch_size, 1)
+            logits_start = torch.cat((logits_start, dummy_na), dim=1)
+            logits_end   = torch.cat((logits_end  , dummy_na), dim=1)
         return logits_start, logits_end
     
     
