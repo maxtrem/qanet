@@ -44,6 +44,10 @@ class SQuADDataset(Dataset):
     def num_nas(self):
         return self.nas.sum().item()
 
+    def byID(self, i):
+        assert (i in self.ids), 'id {i} not not found in self.ids'
+        return self[(self.ids == 10619).argmax()]
+
     def __len__(self):
         return len(self.ids)
 

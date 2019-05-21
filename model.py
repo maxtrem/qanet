@@ -105,7 +105,12 @@ class QANet(nn.Module):
         logits_start = self.p_start(torch.cat((enc_1, enc_2), dim=1), mask_C)
         logits_end   = self.p_end(torch.cat((enc_1, enc_3), dim=1), mask_C)
         
-        return logits_start.view(-1, self.c_limit), logits_end.view(-1, self.c_limit)
+        batch_size   = logits_start.shape[0]
+        dummy_na     = torch.tensor([[float('-inf')]], device=device).expand(batch_size, 1)
+
+        logits_start = torch.cat((logits_start, dummy_na), dim=1)
+        logits_end   = torch.cat((logits_end  , dummy_na), dim=1)
+        return logits_start, logits_end
     
     
     
