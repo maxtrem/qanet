@@ -2,6 +2,15 @@ import torch
 from torch.utils.data import Dataset
 
 import numpy as np
+import random, gc
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+import torch
+from torch.utils.data import Dataset
+
+import numpy as np
 import random
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -34,8 +43,53 @@ class SQuADDataset(Dataset):
         self.y1s[self.nas] = self.na_y
         self.y2s[self.nas] = self.na_y
         
+        
     def num_nas(self):
         return self.nas.sum().item()
+    
+    def overlapByID(self, i):
+        """
+            # Arguments
+                i: (int) question id
+            # Returns
+                n: (int) numer of tokens in question that appear in context
+        """
+        context_tok, _, question_tok, _, _, _, _, _ = self.byID(i)
+        c_idx = context_tok.nonzero()
+        q_idx = question_tok.nonzero()
+        
+        c = context_tok[c_idx]
+        q = question_tok[q_idx]
+        
+        n = torch.tensor(0)
+        for t in q:
+            n += (t == c).sum()
+        return n
+    
+    def lengthByID(self, i):
+        """
+            # Arguments
+                i: (int) question id
+            # Returns
+                (c_len, q_len, a_len): (tuple)
+                c_len: (int) length of context
+                q_len: (int) length of question
+                a_len: (int) length of answer, set to -1 if NA
+        """
+        context_tok, _, question_tok, _, y1, y2, nas, _ = self.byID(i)
+        
+        q_len = question_tok.nonzero().shape[0]
+        c_len = context_tok.nonzero().shape[0]
+        a_len = (y2 - y1).item() + 1
+        nas = nas.item()
+        if nas:
+            a_len = -1
+        return c_len, q_len, a_len
+
+    def byID(self, i):
+        assert (i in self.ids), f'id "{i}" not not found in self.ids'
+        return self[(self.ids == i).argmax()]
+    
 
     def __len__(self):
         return len(self.ids)
@@ -49,7 +103,8 @@ class SQuADDataset(Dataset):
                self.nas[i], self.ids[i]) # question id
         
         # moving tensors to respective device
-        res = tuple(map(lambda x: x.to(self.device), res))
+        res = tuple(map(lambda x: x.to(device), res))
         return res
     
-#dataset = SQuADDataset('data/dev.npz', 600, 32)
+    
+#dataset = SQuADDataset('data/dev.npz', na_possible=True)
