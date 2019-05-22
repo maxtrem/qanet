@@ -7,45 +7,42 @@ import random, gc
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
+import torch
+from torch.utils.data import Dataset
+
+import numpy as np
+import random
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    
 class SQuADDataset(Dataset):
-    def __init__(self, npz_file, device=device, na_possible=True, no_answer_id=1000, no_answer_y=400):
+    def __init__(self, npz_file, device=device, no_answer_id=1000, no_answer_y=400):
         """
             npz_file:   numpy file containing the data
             num_steps:  (int) number of batches to generate - number of training steps
             batch_size: (int) batch size for dataset
             device:     (torch.device) sets the device output tensors will located on
         """
-        assert isinstance(na_possible, bool)
         # sets device for location of outputs
+        self.device = device
         self.na_id  = no_answer_id
         self.na_y   = no_answer_y
-        self.na_possible = na_possible
-        
         data = np.load(npz_file)
-        mask = (torch.from_numpy(data["y2s"]).long() != self.na_id)
-        if na_possible:
-            mask = torch.ones_like(mask)
-            
-        self.mask = mask
-        gc.collect()
         # ids for context tokens and chars
-        self.context_idxs = torch.from_numpy(data["context_idxs"]).long()[mask]
-        self.context_char_idxs = torch.from_numpy(data["context_char_idxs"]).long()[mask]
-        gc.collect()
+        self.context_idxs = torch.from_numpy(data["context_idxs"]).long()
+        self.context_char_idxs = torch.from_numpy(data["context_char_idxs"]).long()
         # ids for question tokens and chars
-        self.ques_idxs = torch.from_numpy(data["ques_idxs"]).long()[mask]
-        self.ques_char_idxs = torch.from_numpy(data["ques_char_idxs"]).long()[mask]
-        gc.collect()
+        self.ques_idxs = torch.from_numpy(data["ques_idxs"]).long()
+        self.ques_char_idxs = torch.from_numpy(data["ques_char_idxs"]).long()
         # targets - answer spans y1s:start, y2s:end, ids for all examples
-        self.y1s = torch.from_numpy(data["y1s"]).long()[mask]
-        self.y2s = torch.from_numpy(data["y2s"]).long()[mask]
-        self.ids = torch.from_numpy(data["ids"]).long()[mask]
-        gc.collect()
+        self.y1s = torch.from_numpy(data["y1s"]).long()
+        self.y2s = torch.from_numpy(data["y2s"]).long()
+        self.ids = torch.from_numpy(data["ids"]).long()
         self.nas = (self.y2s == self.na_id)
         self.y1s[self.nas] = self.na_y
         self.y2s[self.nas] = self.na_y
-        data.close()
-        gc.collect()
+        
         
     def num_nas(self):
         return self.nas.sum().item()
