@@ -42,8 +42,8 @@ class PointerNet(nn.Module):
         """
         unmasked = self.projection_layer(x)
         masked   = apply_mask(unmasked.squeeze(), mask)
-        candidates_idx = masked.argmax(dim=1)
-        candidates = masked[candidates]
+        #candidates_idx = masked.argmax(dim=1)
+        #candidates = masked[candidates_idx]
         if self.na_possible:
             na = F.relu(self.l1(x).transpose(1, 2))
             na = self.l2(na).view(-1, 1)
