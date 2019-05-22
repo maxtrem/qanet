@@ -40,6 +40,7 @@ class SQuADDataset(Dataset):
         self.nas = (self.y2s == self.na_id)
         self.y1s[self.nas] = self.na_y
         self.y2s[self.nas] = self.na_y
+        data.close()
         
     def num_nas(self):
         return self.nas.sum().item()
