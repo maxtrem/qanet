@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 
 import numpy as np
-import random
+import random, gc
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -27,20 +27,25 @@ class SQuADDataset(Dataset):
             mask = torch.ones_like(mask)
             
         self.mask = mask
+        gc.collect()
         # ids for context tokens and chars
         self.context_idxs = torch.from_numpy(data["context_idxs"]).long()[mask]
         self.context_char_idxs = torch.from_numpy(data["context_char_idxs"]).long()[mask]
+        gc.collect()
         # ids for question tokens and chars
         self.ques_idxs = torch.from_numpy(data["ques_idxs"]).long()[mask]
         self.ques_char_idxs = torch.from_numpy(data["ques_char_idxs"]).long()[mask]
+        gc.collect()
         # targets - answer spans y1s:start, y2s:end, ids for all examples
         self.y1s = torch.from_numpy(data["y1s"]).long()[mask]
         self.y2s = torch.from_numpy(data["y2s"]).long()[mask]
         self.ids = torch.from_numpy(data["ids"]).long()[mask]
+        gc.collect()
         self.nas = (self.y2s == self.na_id)
         self.y1s[self.nas] = self.na_y
         self.y2s[self.nas] = self.na_y
         data.close()
+        gc.collect()
         
     def num_nas(self):
         return self.nas.sum().item()
